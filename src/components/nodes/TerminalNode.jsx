@@ -1,0 +1,18 @@
+import { Handle, Position } from '@xyflow/react';
+import { PhoneOff } from 'lucide-react';
+import { nodeClass, nodeStyle } from './nodeStyle';
+import NodeBadges from './NodeBadges';
+
+export default function TerminalNode({ data }) {
+  return (
+    <div className={nodeClass('custom-node terminal-node', data)} style={nodeStyle(data)}>
+      <Handle type="target" position={Position.Left} />
+      <div className="node-title">
+        <PhoneOff size={16} />
+        <span>{data.label}</span>
+      </div>
+      <div className="node-subtitle">Fim da chamada</div>
+      <NodeBadges data={data} />
+    </div>
+  );
+}
