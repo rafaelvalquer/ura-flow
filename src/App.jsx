@@ -36,6 +36,7 @@ export default function App() {
   const [showChangeColors, setShowChangeColors] = useState(false);
   const [focusRequest, setFocusRequest] = useState(null);
   const [isDetailsCollapsed, setDetailsCollapsed] = useState(false);
+  const [isFocusMode, setFocusMode] = useState(false);
   const canvasRef = useRef(null);
 
   const graph = useMemo(
@@ -99,6 +100,7 @@ export default function App() {
       totalSheets: 0,
     });
     setShowChangeColors(false);
+    setFocusMode(false);
   }
 
   function handleWarningClick(warning) {
@@ -147,7 +149,9 @@ export default function App() {
           selectedState={selectedState}
           viewMode={viewMode}
           showChangeColors={showChangeColors}
+          isFocusMode={isFocusMode}
           onToggleChangeColors={() => setShowChangeColors((value) => !value)}
+          onToggleFocusMode={() => setFocusMode((value) => !value)}
           onOrganize={handleOrganize}
           onExport={handleExport}
           onClear={handleClear}
@@ -156,7 +160,8 @@ export default function App() {
           canHighlightChanges={graph.nodes.length > 0}
         />
 
-        <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""}`}>
+        <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
+          {!isFocusMode && (
           <aside className="left-sidebar">
             <UploadPanel
               onFileSelected={handleFileSelected}
@@ -224,21 +229,25 @@ export default function App() {
               </>
             )}
           </aside>
+          )}
 
           <FlowCanvas
             nodes={graph.nodes}
             edges={graph.edges}
             layoutVersion={layoutVersion}
             focusRequest={focusRequest}
+            selection={selection}
             onSelectionChange={setSelection}
             canvasRef={canvasRef}
           />
 
+          {!isFocusMode && (
           <DetailsPanel
             selection={selection}
             isCollapsed={isDetailsCollapsed}
             onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
           />
+          )}
         </div>
       </div>
     </ReactFlowProvider>

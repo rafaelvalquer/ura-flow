@@ -1,11 +1,13 @@
-import { FileDown, LayoutGrid, Palette, RotateCcw } from 'lucide-react';
+import { FileDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
 
 export default function Toolbar({
   fileName,
   selectedState,
   viewMode,
   showChangeColors,
+  isFocusMode,
   onToggleChangeColors,
+  onToggleFocusMode,
   onOrganize,
   onExport,
   onClear,
@@ -17,12 +19,12 @@ export default function Toolbar({
     <header className="app-toolbar">
       <div>
         <h1>URA Flow Builder</h1>
-        <p>{fileName ? `Arquivo: ${fileName}` : 'Importe uma spec Excel para começar'}</p>
+        <p>{fileName ? `Arquivo: ${fileName}` : 'Importe uma spec Excel para comecar'}</p>
       </div>
       <div className="toolbar-context">
         {selectedState && (
           <span className="selected-pill">
-            {selectedState} · {viewMode === 'detailedView' ? 'Visão detalhada' : 'Visão por estado'}
+            {selectedState} - {viewMode === 'detailedView' ? 'Visao detalhada' : 'Visao por estado'}
           </span>
         )}
         <button
@@ -33,7 +35,11 @@ export default function Toolbar({
           title="Cor importada da coluna B da spec"
         >
           <Palette size={16} />
-          {showChangeColors ? 'Ocultar alterações' : 'Destacar alterações'}
+          {showChangeColors ? 'Ocultar alteracoes' : 'Destacar alteracoes'}
+        </button>
+        <button className={`ghost-button ${isFocusMode ? 'active-highlight' : ''}`} type="button" onClick={onToggleFocusMode}>
+          {isFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          {isFocusMode ? 'Sair do foco' : 'Modo foco'}
         </button>
         <button className="ghost-button" type="button" onClick={onOrganize} disabled={!canOrganize}>
           <LayoutGrid size={16} />

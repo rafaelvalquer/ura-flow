@@ -14,6 +14,9 @@ import TerminalNode from './nodes/TerminalNode';
 import TransferNode from './nodes/TransferNode';
 import UnknownNode from './nodes/UnknownNode';
 import BiMarkingNode from './nodes/BiMarkingNode';
+import FlowLegend from './FlowLegend';
+import FlowBreadcrumb from './FlowBreadcrumb';
+import CanvasEmptyState from './CanvasEmptyState';
 
 const nodeTypes = {
   stateNode: StateNode,
@@ -29,6 +32,7 @@ export default function FlowCanvas({
   edges,
   layoutVersion,
   focusRequest,
+  selection,
   onSelectionChange,
   canvasRef,
 }) {
@@ -97,26 +101,27 @@ export default function FlowCanvas({
   return (
     <main className="flow-shell" ref={wrapperRef}>
       {nodes.length === 0 ? (
-        <div className="canvas-empty">
-          <strong>Nenhum fluxo carregado</strong>
-          <span>Envie uma planilha .xlsx e selecione um estado para visualizar.</span>
-        </div>
+        <CanvasEmptyState />
       ) : (
-        <ReactFlow
-          nodes={flowNodes}
-          edges={flowEdges}
-          nodeTypes={memoNodeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={handleNodeClick}
-          onEdgeClick={handleEdgeClick}
-          onPaneClick={handlePaneClick}
-          fitView
-        >
-          <Background color="#CBD5E1" gap={18} size={1} />
-          <Controls />
-          <MiniMap pannable zoomable nodeStrokeWidth={3} />
-        </ReactFlow>
+        <>
+          <FlowBreadcrumb selection={selection} />
+          <FlowLegend />
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={memoNodeTypes}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={handleNodeClick}
+            onEdgeClick={handleEdgeClick}
+            onPaneClick={handlePaneClick}
+            fitView
+          >
+            <Background color="#CBD5E1" gap={18} size={1} />
+            <Controls />
+            <MiniMap pannable zoomable nodeStrokeWidth={3} />
+          </ReactFlow>
+        </>
       )}
     </main>
   );

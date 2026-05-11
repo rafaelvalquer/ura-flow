@@ -243,6 +243,10 @@ button:disabled {
   grid-template-columns: 336px minmax(760px, 1fr) 54px;
 }
 
+.workspace-grid.focus-mode {
+  grid-template-columns: minmax(760px, 1fr);
+}
+
 .left-sidebar,
 .details-panel {
   min-height: 0;
@@ -469,6 +473,115 @@ button:disabled {
   position: relative;
 }
 
+.flow-overlay {
+  position: absolute;
+  z-index: 20;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.flow-breadcrumb {
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  padding: 8px 11px;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.breadcrumb-part {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.breadcrumb-part:not(:last-child) {
+  color: #475569;
+}
+
+.breadcrumb-part b {
+  color: #94a3b8;
+}
+
+.breadcrumb-empty {
+  color: #6b7280;
+}
+
+.overlay-toggle {
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.flow-legend {
+  left: 12px;
+  bottom: 12px;
+  max-width: 360px;
+  padding: 9px;
+}
+
+.flow-legend.is-collapsed {
+  padding: 6px;
+}
+
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 10px;
+  margin-top: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.legend-item i {
+  width: 16px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid #cbd5e1;
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+.legend-state { border-color: #60a5fa !important; }
+.legend-condition { border-color: #d1d5db !important; background: #f8fafc !important; }
+.legend-terminal { border-color: #64748b !important; background: #f9fafb !important; }
+.legend-transfer { border-color: #f59e0b !important; background: #fffbeb !important; }
+.legend-unknown { border-color: #ef4444 !important; background: #fef2f2 !important; }
+.legend-bi { border-color: #10b981 !important; background: #f0fdfa !important; }
+.legend-change { border-color: #7c3aed !important; background: #f5f3ff !important; }
+.legend-incoming,
+.legend-outgoing {
+  height: 0 !important;
+  border-width: 0 0 3px !important;
+  border-style: dashed !important;
+  background: transparent !important;
+}
+.legend-incoming { border-color: #7c3aed !important; }
+.legend-outgoing { border-color: #0891b2 !important; }
+.legend-alert { border-color: #f59e0b !important; background: #fffbeb !important; }
+
 .canvas-empty {
   position: absolute;
   inset: 0;
@@ -483,6 +596,70 @@ button:disabled {
 .canvas-empty strong {
   color: #111827;
   font-size: 18px;
+}
+
+.canvas-empty-rich {
+  gap: 16px;
+  padding: 30px;
+  text-align: center;
+}
+
+.empty-flow-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.empty-flow-preview span {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.empty-flow-preview span:nth-of-type(2) {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.empty-flow-preview span:nth-of-type(3) {
+  border-color: #d1fae5;
+  background: #f0fdfa;
+  color: #047857;
+}
+
+.empty-flow-preview i {
+  width: 28px;
+  border-top: 2px dashed #94a3b8;
+}
+
+.empty-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.empty-steps span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 7px 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .custom-node {
