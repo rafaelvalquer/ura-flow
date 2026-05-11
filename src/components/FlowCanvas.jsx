@@ -53,7 +53,9 @@ export default function FlowCanvas({
       if (!target) return;
 
       setNodes(nodes.map((node) => ({ ...node, selected: target.kind === 'node' && node.id === target.item.id })));
-      setEdges(edges.map((edge) => ({ ...edge, selected: target.kind === 'edge' && edge.id === target.item.id })));
+      setEdges(target.kind === 'node'
+        ? applyNodeConnectionHighlight(edges, target.item.id)
+        : applySingleEdgeHighlight(edges, target.item.id));
 
       if (target.kind === 'node') {
         const center = getNodeCenter(target.item);
@@ -74,6 +76,24 @@ export default function FlowCanvas({
 
   const memoNodeTypes = useMemo(() => nodeTypes, []);
 
+  function handleNodeClick(_, node) {
+    setNodes(flowNodes.map((item) => ({ ...item, selected: item.id === node.id })));
+    setEdges(applyNodeConnectionHighlight(flowEdges, node.id));
+    onSelectionChange(selectionFromNode(node));
+  }
+
+  function handleEdgeClick(_, edge) {
+    setNodes(flowNodes.map((node) => ({ ...node, selected: false })));
+    setEdges(applySingleEdgeHighlight(flowEdges, edge.id));
+    onSelectionChange(selectionFromEdge(edge));
+  }
+
+  function handlePaneClick() {
+    setNodes(flowNodes.map((node) => ({ ...node, selected: false })));
+    setEdges(clearEdgeHighlight(flowEdges));
+    onSelectionChange(null);
+  }
+
   return (
     <main className="flow-shell" ref={wrapperRef}>
       {nodes.length === 0 ? (
@@ -88,9 +108,9 @@ export default function FlowCanvas({
           nodeTypes={memoNodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          onNodeClick={(_, node) => onSelectionChange(selectionFromNode(node))}
-          onEdgeClick={(_, edge) => onSelectionChange(selectionFromEdge(edge))}
-          onPaneClick={() => onSelectionChange(null)}
+          onNodeClick={handleNodeClick}
+          onEdgeClick={handleEdgeClick}
+          onPaneClick={handlePaneClick}
           fitView
         >
           <Background color="#CBD5E1" gap={18} size={1} />
@@ -100,6 +120,53 @@ export default function FlowCanvas({
       )}
     </main>
   );
+}
+
+function applyNodeConnectionHighlight(edges, nodeId) {
+  return edges.map((edge) => {
+    const directionClass = edge.target === nodeId
+      ? 'edge-connected edge-incoming'
+      : edge.source === nodeId
+        ? 'edge-connected edge-outgoing'
+        : '';
+
+    return {
+      ...edge,
+      selected: Boolean(directionClass),
+      className: mergeEdgeClasses(edge.className, directionClass),
+    };
+  });
+}
+
+function applySingleEdgeHighlight(edges, edgeId) {
+  return edges.map((edge) => {
+    const isSelected = edge.id === edgeId;
+    return {
+      ...edge,
+      selected: isSelected,
+      className: mergeEdgeClasses(edge.className, isSelected ? 'edge-connected edge-selected-direct' : ''),
+    };
+  });
+}
+
+function clearEdgeHighlight(edges) {
+  return edges.map((edge) => ({
+    ...edge,
+    selected: false,
+    className: mergeEdgeClasses(edge.className, ''),
+  }));
+}
+
+function mergeEdgeClasses(className = '', highlightClass = '') {
+  const baseClasses = String(className)
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((item) => !item.startsWith('edge-connected')
+      && item !== 'edge-incoming'
+      && item !== 'edge-outgoing'
+      && item !== 'edge-selected-direct');
+
+  return [...baseClasses, ...highlightClass.split(/\s+/).filter(Boolean)].join(' ');
 }
 
 function findFocusTarget(nodes, edges, request) {
