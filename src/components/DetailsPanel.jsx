@@ -1,6 +1,11 @@
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 
-export default function DetailsPanel({ selection, isCollapsed = false, onToggleCollapsed }) {
+export default function DetailsPanel({
+  selection,
+  isCollapsed = false,
+  onToggleCollapsed,
+  onOpenOccurrence,
+}) {
   const data = selection?.data ?? {};
   const transitions = data.transitions ?? (data.transition ? [data.transition] : []);
   const firstTransition = transitions[0];
@@ -43,7 +48,7 @@ export default function DetailsPanel({ selection, isCollapsed = false, onToggleC
         </div>
       </div>
 
-      {!selection && <p className="empty-state">Selecione um nó ou transição para inspecionar a regra.</p>}
+      {!selection && <p className="empty-state">Selecione um no ou transicao para inspecionar a regra.</p>}
 
       {selection && (
         <div className="detail-stack">
@@ -52,22 +57,22 @@ export default function DetailsPanel({ selection, isCollapsed = false, onToggleC
           <Detail label="Origem" value={firstTransition?.from} />
           <Detail label="Destino" value={firstTransition?.to} />
           <Detail label="Prompt" value={data.prompt || firstTransition?.prompt} badge />
-          <Detail label="Observação" value={firstTransition?.observation} />
-          <Detail label="Código B.I." value={data.biCode || firstTransition?.biCode} />
-          <Detail label="Descrição B.I." value={data.biDescription || firstTransition?.biDescription} />
-          <Detail label="Marcação de B.I." value={data.bi || firstTransition?.bi} />
+          <Detail label="Observacao" value={firstTransition?.observation} />
+          <Detail label="Codigo B.I." value={data.biCode || firstTransition?.biCode} />
+          <Detail label="Descricao B.I." value={data.biDescription || firstTransition?.biDescription} />
+          <Detail label="Marcacao de B.I." value={data.bi || firstTransition?.bi} />
           <Detail label="Aba" value={firstTransition?.sheetName} />
           <Detail label="Linha" value={firstTransition?.rowNumber} />
           {changeColors.length > 0 && (
             <>
-              <Detail label="Alteração marcada" value="Sim" />
+              <Detail label="Alteracao marcada" value="Sim" />
               <Detail label="Cor coluna B" value={changeColors.join(', ')} color={changeColors[0]} />
             </>
           )}
 
           {firstTransition?.conditions?.length > 0 && (
             <div className="detail-block">
-              <span className="detail-label">Condições</span>
+              <span className="detail-label">Condicoes</span>
               <ol className="condition-list">
                 {firstTransition.conditions.map((condition, index) => (
                   <li key={`${condition}-${index}`}>{condition}</li>
@@ -77,14 +82,56 @@ export default function DetailsPanel({ selection, isCollapsed = false, onToggleC
           )}
 
           {transitions.length > 1 && (
-            <div className="detail-block">
-              <span className="detail-label">Transições agrupadas</span>
-              <strong>{transitions.length}</strong>
-            </div>
+            <GroupedOccurrences transitions={transitions} onOpenOccurrence={onOpenOccurrence} />
           )}
         </div>
       )}
     </aside>
+  );
+}
+
+function GroupedOccurrences({ transitions, onOpenOccurrence }) {
+  return (
+    <div className="detail-block occurrence-block">
+      <span className="detail-label">Ocorrencias agrupadas</span>
+      <strong>{transitions.length} caminhos para este destino</strong>
+      <div className="occurrence-list">
+        {transitions.map((transition) => (
+          <article className="occurrence-item" key={transition.id}>
+            <div className="occurrence-title">
+              <span>Linha {transition.rowNumber}</span>
+              {transition.changeColor && (
+                <span className="color-swatch" style={{ backgroundColor: transition.changeColor }} />
+              )}
+            </div>
+            <p>{transition.conditions?.join(' > ') || 'Sem condicoes'}</p>
+            <dl>
+              <OccurrenceDetail label="Destino" value={transition.to} />
+              <OccurrenceDetail label="Prompt" value={transition.prompt || 'Sem prompt'} />
+              <OccurrenceDetail label="B.I." value={transition.biCode || transition.biDescription || transition.bi} />
+              <OccurrenceDetail label="Obs." value={transition.observation} />
+            </dl>
+            <button
+              type="button"
+              className="occurrence-action"
+              onClick={() => onOpenOccurrence?.(transition)}
+            >
+              Abrir no fluxo
+            </button>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OccurrenceDetail({ label, value }) {
+  if (!value) return null;
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </>
   );
 }
 

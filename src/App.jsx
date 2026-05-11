@@ -5,10 +5,10 @@ import StateList from "./components/StateList";
 import FlowCanvas from "./components/FlowCanvas";
 import DetailsPanel from "./components/DetailsPanel";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
-import BiSearchPanel from "./components/BiSearchPanel";
+import GlobalSearchPanel from "./components/GlobalSearchPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import Toolbar from "./components/Toolbar";
-import { parseExcelFile } from "./services/excelParser.js";
+import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
 import { exportFlowToPdf } from "./services/pdfExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
@@ -18,7 +18,7 @@ export default function App() {
   const [selectedState, setSelectedState] = useState("");
   const [viewMode, setViewMode] = useState("stateView");
   const [search, setSearch] = useState("");
-  const [biSearch, setBiSearch] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [diagnosticsScope, setDiagnosticsScope] = useState("state");
   const [selection, setSelection] = useState(null);
@@ -37,14 +37,25 @@ export default function App() {
   const [focusRequest, setFocusRequest] = useState(null);
   const [isDetailsCollapsed, setDetailsCollapsed] = useState(false);
   const [isFocusMode, setFocusMode] = useState(false);
+  const [savedPositionsVersion, setSavedPositionsVersion] = useState(0);
   const canvasRef = useRef(null);
 
-  const graph = useMemo(
+  const rawGraph = useMemo(
     () => buildFlow(parsedData, selectedState, viewMode, { showChangeColors }),
     [parsedData, selectedState, viewMode, showChangeColors],
   );
 
-  const biIndex = useMemo(() => buildBiIndex(parsedData), [parsedData]);
+  const positionStorageKey = useMemo(
+    () => makePositionStorageKey(parsedData?.fileName, selectedState, viewMode, rawGraph.nodes),
+    [parsedData?.fileName, selectedState, viewMode, rawGraph.nodes],
+  );
+
+  const graph = useMemo(
+    () => applySavedNodePositions(rawGraph, positionStorageKey),
+    [rawGraph, positionStorageKey, savedPositionsVersion],
+  );
+
+  const globalIndex = useMemo(() => buildGlobalIndex(parsedData), [parsedData]);
 
   async function handleFileSelected(file) {
     setLoading(true);
@@ -64,7 +75,7 @@ export default function App() {
       setParsedData(result);
       setSelectedState(result.states[0]?.sheetName ?? "");
       setSearch("");
-      setBiSearch("");
+      setGlobalSearch("");
       setFilter("all");
     } catch (caught) {
       setError(caught?.message ?? "Não foi possível processar o arquivo.");
@@ -87,7 +98,7 @@ export default function App() {
     setSelection(null);
     setFocusRequest(null);
     setSearch("");
-    setBiSearch("");
+    setGlobalSearch("");
     setFilter("all");
     setDiagnosticsScope("state");
     setError("");
@@ -115,22 +126,51 @@ export default function App() {
     });
   }
 
-  function handleBiSelect(item) {
+  function handleGlobalResultSelect(item) {
     setSelectedState(item.sheetName);
+    setSelection(null);
+
+    if (item.type === "state") {
+      setFocusRequest(null);
+      return;
+    }
+
+    if (item.type !== "destination") {
+      setViewMode("detailedView");
+    }
+
+    setFocusRequest({
+      kind: item.type === "bi" ? "bi" : item.type,
+      sheetName: item.sheetName,
+      rowNumber: item.rowNumber ?? null,
+      transitionId: item.transitionId,
+      type: item.warningType,
+      nonce: Date.now(),
+    });
+  }
+
+  function handleOpenOccurrence(transition) {
+    setSelectedState(transition.sheetName);
     setViewMode("detailedView");
     setSelection(null);
     setFocusRequest({
-      kind: "bi",
-      sheetName: item.sheetName,
-      rowNumber: item.rowNumber,
-      transitionId: item.transitionId,
+      kind: "occurrence",
+      sheetName: transition.sheetName,
+      rowNumber: transition.rowNumber,
+      transitionId: transition.id,
       nonce: Date.now(),
     });
   }
 
   function handleOrganize() {
     setFocusRequest(null);
+    saveNodePositions(positionStorageKey, rawGraph.nodes);
+    setSavedPositionsVersion((version) => version + 1);
     setLayoutVersion((version) => version + 1);
+  }
+
+  function handleNodePositionsChange(nodes) {
+    saveNodePositions(positionStorageKey, nodes);
   }
 
   async function handleExport() {
@@ -197,6 +237,12 @@ export default function App() {
             </section>
             {parsedData && (
               <>
+                <GlobalSearchPanel
+                  items={globalIndex}
+                  search={globalSearch}
+                  onSearchChange={setGlobalSearch}
+                  onSelect={handleGlobalResultSelect}
+                />
                 <StateList
                   states={parsedData.states}
                   sheetNames={parsedData.sheetNames}
@@ -210,12 +256,6 @@ export default function App() {
                   onSearchChange={setSearch}
                   filter={filter}
                   onFilterChange={setFilter}
-                />
-                <BiSearchPanel
-                  items={biIndex}
-                  search={biSearch}
-                  onSearchChange={setBiSearch}
-                  onSelect={handleBiSelect}
                 />
                 <DiagnosticsPanel
                   diagnostics={parsedData.diagnostics}
@@ -238,6 +278,7 @@ export default function App() {
             focusRequest={focusRequest}
             selection={selection}
             onSelectionChange={setSelection}
+            onNodePositionsChange={handleNodePositionsChange}
             canvasRef={canvasRef}
           />
 
@@ -246,6 +287,7 @@ export default function App() {
             selection={selection}
             isCollapsed={isDetailsCollapsed}
             onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
+            onOpenOccurrence={handleOpenOccurrence}
           />
           )}
         </div>
@@ -254,27 +296,156 @@ export default function App() {
   );
 }
 
-function buildBiIndex(parsedData) {
+function buildGlobalIndex(parsedData) {
   if (!parsedData?.states?.length) return [];
 
-  return parsedData.states.flatMap((state) => {
-    return state.transitions
-      .filter((transition) => transition.hasBiMarking)
-      .map((transition) => {
-        const biCode = transition.biCode ?? "";
-        const biDescription = transition.biDescription ?? "";
-        const bi = transition.bi ?? "";
-        return {
-          transitionId: transition.id,
+  const items = [];
+
+  parsedData.states.forEach((state) => {
+    items.push(makeSearchItem({
+      id: `state-${state.sheetName}`,
+      type: "state",
+      title: state.sheetName,
+      subtitle: `${state.transitions.length} transicoes`,
+      meta: "Estado",
+      sheetName: state.sheetName,
+      text: `${state.sheetName} estado`,
+    }));
+
+    state.transitions.forEach((transition) => {
+      const lineMeta = `${state.sheetName} · linha ${transition.rowNumber}`;
+
+      items.push(makeSearchItem({
+        id: `dest-${transition.id}`,
+        type: "destination",
+        title: transition.to || "Destino vazio",
+        subtitle: transition.conditions?.slice(-2).join(" > ") || "Sem condicoes",
+        meta: lineMeta,
+        sheetName: state.sheetName,
+        rowNumber: transition.rowNumber,
+        transitionId: transition.id,
+        text: `${transition.to} ${transition.conditions?.join(" ")} linha ${transition.rowNumber}`,
+      }));
+
+      if (transition.prompt) {
+        items.push(makeSearchItem({
+          id: `prompt-${transition.id}`,
+          type: "prompt",
+          title: transition.prompt,
+          subtitle: transition.to,
+          meta: lineMeta,
           sheetName: state.sheetName,
           rowNumber: transition.rowNumber,
-          destination: transition.to,
-          prompt: transition.prompt,
-          bi,
-          biCode,
-          biDescription,
-          searchKey: normalizeKey(`${biCode} ${biDescription} ${bi} ${state.sheetName}`),
-        };
+          transitionId: transition.id,
+          text: `${transition.prompt} ${transition.to} ${transition.conditions?.join(" ")}`,
+        }));
+      }
+
+      transition.conditions?.forEach((condition, index) => {
+        items.push(makeSearchItem({
+          id: `condition-${transition.id}-${index}`,
+          type: "condition",
+          title: condition,
+          subtitle: transition.to,
+          meta: lineMeta,
+          sheetName: state.sheetName,
+          rowNumber: transition.rowNumber,
+          transitionId: transition.id,
+          text: `${condition} ${transition.to} linha ${transition.rowNumber}`,
+        }));
       });
+
+      if (transition.hasBiMarking) {
+        items.push(makeSearchItem({
+          id: `bi-${transition.id}`,
+          type: "bi",
+          title: transition.biCode || "Marcacao sem codigo",
+          subtitle: transition.biDescription || transition.bi,
+          meta: lineMeta,
+          sheetName: state.sheetName,
+          rowNumber: transition.rowNumber,
+          transitionId: transition.id,
+          text: `${transition.biCode} ${transition.biDescription} ${transition.bi} ${state.sheetName} linha ${transition.rowNumber}`,
+        }));
+      }
+    });
   });
+
+  parsedData.diagnostics?.warnings?.forEach((warning, index) => {
+    if (!warning.sheetName) return;
+    items.push(makeSearchItem({
+      id: `warning-${index}`,
+      type: "warning",
+      title: warning.message,
+      subtitle: warning.type,
+      meta: warning.rowNumber ? `${warning.sheetName} · linha ${warning.rowNumber}` : warning.sheetName,
+      sheetName: warning.sheetName,
+      rowNumber: warning.rowNumber,
+      warningType: warning.type,
+      text: `${warning.message} ${warning.type} ${warning.sheetName} linha ${warning.rowNumber ?? ""}`,
+    }));
+  });
+
+  return items;
+}
+
+function makeSearchItem({ text, ...item }) {
+  return {
+    ...item,
+    searchKey: normalizeKey(`${text} ${item.title} ${item.subtitle} ${item.meta}`),
+  };
+}
+
+function makePositionStorageKey(fileName, selectedState, viewMode, nodes) {
+  if (!fileName || !selectedState || !nodes.length) return "";
+  const nodeSignature = nodes.map((node) => node.id).sort().join("|");
+  return `ura-flow:positions:${normalizeKey(fileName)}:${normalizeKey(selectedState)}:${viewMode}:${hashString(nodeSignature)}`;
+}
+
+function applySavedNodePositions(graph, storageKey) {
+  if (!storageKey) return graph;
+  const savedPositions = readSavedPositions(storageKey);
+  if (!savedPositions) return graph;
+
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      const position = savedPositions[node.id];
+      return position ? { ...node, position } : node;
+    }),
+  };
+}
+
+function saveNodePositions(storageKey, nodes) {
+  if (!storageKey || !nodes?.length) return;
+  try {
+    const positions = nodes.reduce((stored, node) => {
+      stored[node.id] = {
+        x: Math.round(node.position?.x ?? 0),
+        y: Math.round(node.position?.y ?? 0),
+      };
+      return stored;
+    }, {});
+    localStorage.setItem(storageKey, JSON.stringify(positions));
+  } catch {
+    // localStorage can be unavailable in restricted browser modes.
+  }
+}
+
+function readSavedPositions(storageKey) {
+  try {
+    const value = localStorage.getItem(storageKey);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
 }

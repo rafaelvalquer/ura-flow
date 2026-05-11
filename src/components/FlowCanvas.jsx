@@ -4,6 +4,7 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
+  applyNodeChanges,
   useEdgesState,
   useNodesState,
   useReactFlow,
@@ -34,6 +35,7 @@ export default function FlowCanvas({
   focusRequest,
   selection,
   onSelectionChange,
+  onNodePositionsChange,
   canvasRef,
 }) {
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
@@ -98,6 +100,27 @@ export default function FlowCanvas({
     onSelectionChange(null);
   }
 
+  function handleNodesChange(changes) {
+    const updatedNodes = applyNodeChanges(changes, flowNodes);
+    onNodesChange(changes);
+
+    const shouldPersist = changes.some((change) => (
+      change.type === 'position'
+      && change.position
+      && change.dragging === false
+    ));
+    if (shouldPersist) {
+      onNodePositionsChange?.(updatedNodes);
+    }
+  }
+
+  function handleNodeDragStop(_, node) {
+    const updatedNodes = flowNodes.map((item) => (
+      item.id === node.id ? { ...item, position: node.position } : item
+    ));
+    onNodePositionsChange?.(updatedNodes);
+  }
+
   return (
     <main className="flow-shell" ref={wrapperRef}>
       {nodes.length === 0 ? (
@@ -110,10 +133,11 @@ export default function FlowCanvas({
             nodes={flowNodes}
             edges={flowEdges}
             nodeTypes={memoNodeTypes}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={handleNodeClick}
             onEdgeClick={handleEdgeClick}
+            onNodeDragStop={handleNodeDragStop}
             onPaneClick={handlePaneClick}
             fitView
           >

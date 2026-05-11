@@ -1,11 +1,11 @@
-import { parseExcelFileInWorker } from '../services/excelParserCore.js';
+import { parseExcelFile } from '../services/excelParser.js';
 
 self.onmessage = async (event) => {
   const message = event.data ?? {};
   if (message.type !== 'parse') return;
 
   try {
-    const result = await parseExcelFileInWorker(message.file, (progress) => {
+    const result = await parseExcelFile(message.file, (progress) => {
       self.postMessage({ type: 'progress', progress });
     });
     self.postMessage({ type: 'done', result });
