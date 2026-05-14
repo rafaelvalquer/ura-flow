@@ -9,15 +9,16 @@ export function buildFlow(parsedData, selectedStateName, mode = 'stateView', opt
 
   const showChangeColors = Boolean(options.showChangeColors);
   const showBiMarkings = options.showBiMarkings !== false;
+  const comparisonChanges = options.comparisonChanges ?? {};
   const graph = mode === 'detailedView'
-    ? buildDetailedView(parsedData, selectedState, showChangeColors, showBiMarkings)
-    : buildStateView(parsedData, selectedState, showChangeColors, showBiMarkings);
+    ? buildDetailedView(parsedData, selectedState, showChangeColors, showBiMarkings, comparisonChanges)
+    : buildStateView(parsedData, selectedState, showChangeColors, showBiMarkings, comparisonChanges);
 
   const laidOut = layoutFlow(graph.nodes, graph.edges, mode);
   return { nodes: laidOut.nodes, edges: laidOut.edges };
 }
 
-function buildStateView(parsedData, state, showChangeColors, showBiMarkings) {
+function buildStateView(parsedData, state, showChangeColors, showBiMarkings, comparisonChanges) {
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
       role: 'origin',
@@ -48,6 +49,7 @@ function buildStateView(parsedData, state, showChangeColors, showBiMarkings) {
     const changeColors = getTransitionChangeColors(group.transitions);
     const changeColor = showChangeColors ? changeColors[0] : '';
     const biMarkings = showBiMarkings ? getTransitionBiMarkings(group.transitions) : [];
+    const transitionComparisonChanges = getTransitionComparisonChanges(group.transitions, comparisonChanges);
 
     if (!nodeIds.has(targetId)) {
       nodes.push(makeNode(targetId, nodeTypeForDestination(group.type), group.label, {
@@ -62,6 +64,8 @@ function buildStateView(parsedData, state, showChangeColors, showBiMarkings) {
         hasChangeColor: changeColors.length > 0,
         changeColors,
         changeColor,
+        hasComparisonChange: transitionComparisonChanges.length > 0,
+        comparisonChanges: transitionComparisonChanges,
         level: 1,
       }));
       nodeIds.add(targetId);
@@ -93,14 +97,15 @@ function buildStateView(parsedData, state, showChangeColors, showBiMarkings) {
       changeColors,
       type: group.type,
       hasEmptyPrompt,
+      comparisonChanges: transitionComparisonChanges,
     }));
   });
 
   return { nodes, edges };
 }
 
-function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings) {
-  if (state.decisionTree?.length) return buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings);
+function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings, comparisonChanges) {
+  if (state.decisionTree?.length) return buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings, comparisonChanges);
 
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
@@ -144,7 +149,17 @@ function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings) 
       previousId = nodeId;
     });
 
-    const targetId = ensureDestinationNode({ parsedData, state, showChangeColors, nodes, nodeIds, transition, transitionIndex });
+    const transitionComparisonChanges = getTransitionComparisonChanges([transition], comparisonChanges);
+    const targetId = ensureDestinationNode({
+      parsedData,
+      state,
+      showChangeColors,
+      nodes,
+      nodeIds,
+      transition,
+      transitionIndex,
+      comparisonChanges: transitionComparisonChanges,
+    });
     const type = classifyDestination(transition.to, parsedData.sheetNames, state.sheetName);
 
     edges.push(makeEdge({
@@ -158,6 +173,7 @@ function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings) 
       changeColors: transition.changeColor ? [transition.changeColor] : [],
       type,
       hasEmptyPrompt: !transition.prompt,
+      comparisonChanges: transitionComparisonChanges,
     }));
 
     if (showBiMarkings) {
@@ -168,7 +184,7 @@ function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings) 
   return { nodes, edges };
 }
 
-function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings) {
+function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings, comparisonChanges) {
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
       role: 'origin',
@@ -216,6 +232,7 @@ function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMa
 
       if (decision.destination) {
         const transition = transitionsById.get(decision.transitionId);
+        const transitionComparisonChanges = getTransitionComparisonChanges(transition ? [transition] : [], comparisonChanges);
         const targetId = ensureDestinationNode({
           parsedData,
           state,
@@ -224,6 +241,7 @@ function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMa
           nodeIds,
           transition,
           decision,
+          comparisonChanges: transitionComparisonChanges,
         });
         const type = classifyDestination(decision.destination, parsedData.sheetNames, state.sheetName);
 
@@ -238,6 +256,7 @@ function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMa
           changeColors: transition?.changeColor ? [transition.changeColor] : [],
           type,
           hasEmptyPrompt: !(transition?.prompt || decision.prompt),
+          comparisonChanges: transitionComparisonChanges,
         }));
 
         if (showBiMarkings && transition) {
@@ -255,7 +274,17 @@ function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMa
   return { nodes, edges };
 }
 
-function ensureDestinationNode({ parsedData, state, showChangeColors, nodes, nodeIds, transition, transitionIndex = 0, decision = null }) {
+function ensureDestinationNode({
+  parsedData,
+  state,
+  showChangeColors,
+  nodes,
+  nodeIds,
+  transition,
+  transitionIndex = 0,
+  decision = null,
+  comparisonChanges = [],
+}) {
   const destination = transition?.to ?? decision?.destination ?? '';
   const rowNumber = transition?.rowNumber ?? decision?.rowNumber ?? transitionIndex;
   const type = classifyDestination(destination, parsedData.sheetNames, state.sheetName);
@@ -277,6 +306,8 @@ function ensureDestinationNode({ parsedData, state, showChangeColors, nodes, nod
       hasChangeColor: Boolean(transition?.hasChangeColor),
       changeColors: transition?.changeColor ? [transition.changeColor] : [],
       changeColor: showChangeColors ? transition?.changeColor : '',
+      hasComparisonChange: comparisonChanges.length > 0,
+      comparisonChanges,
       level: (transition?.conditions?.length ?? decision?.level ?? 0) + 1,
     }));
     nodeIds.add(targetId);
@@ -353,6 +384,7 @@ function makeEdge({
   rowNumber = null,
   warningTargetRows = [],
   hasEmptyPrompt = false,
+  comparisonChanges = [],
 }) {
   const transitionRows = transitions.map((transition) => transition.rowNumber).filter(Boolean);
   const transitionIds = transitions.map((transition) => transition.id).filter(Boolean);
@@ -372,11 +404,17 @@ function makeEdge({
       rowNumber: rowNumber ?? transitionRows[0] ?? null,
       warningTargetRows: rows,
       transitionIds,
+      hasComparisonChange: comparisonChanges.length > 0,
+      comparisonChanges,
     },
     markerEnd: { type: MarkerType.ArrowClosed },
-    className: `flow-edge edge-${type}${hasEmptyPrompt ? ' edge-empty-prompt' : ''}`,
+    className: `flow-edge edge-${type}${hasEmptyPrompt ? ' edge-empty-prompt' : ''}${comparisonChanges.length ? ' edge-comparison-change' : ''}`,
     type: source === target ? 'default' : 'smoothstep',
   };
+}
+
+function getTransitionComparisonChanges(transitions = [], comparisonChanges = {}) {
+  return transitions.flatMap((transition) => comparisonChanges[transition.id] ?? []);
 }
 
 function getTransitionChangeColors(transitions = []) {

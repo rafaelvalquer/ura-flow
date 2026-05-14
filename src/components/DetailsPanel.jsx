@@ -1,4 +1,5 @@
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { getComparisonFieldLabel } from '../services/compareSpecs.js';
 
 export default function DetailsPanel({
   selection,
@@ -12,6 +13,7 @@ export default function DetailsPanel({
   const changeColors = data.changeColors?.length
     ? data.changeColors
     : [...new Set(transitions.map((transition) => transition.changeColor).filter(Boolean))];
+  const comparisonChanges = data.comparisonChanges ?? [];
 
   if (isCollapsed) {
     return (
@@ -70,6 +72,10 @@ export default function DetailsPanel({
             </>
           )}
 
+          {comparisonChanges.length > 0 && (
+            <ComparisonChanges changes={comparisonChanges} />
+          )}
+
           {firstTransition?.conditions?.length > 0 && (
             <div className="detail-block">
               <span className="detail-label">Condicoes</span>
@@ -87,6 +93,45 @@ export default function DetailsPanel({
         </div>
       )}
     </aside>
+  );
+}
+
+function ComparisonChanges({ changes }) {
+  return (
+    <div className="detail-block comparison-detail-block">
+      <span className="detail-label">Comparacao entre specs</span>
+      <div className="comparison-detail-list">
+        {changes.map((change, index) => (
+          <article className="comparison-detail-card" key={`${change.transitionKey}-${index}`}>
+            <strong>{formatChangeTitle(change)}</strong>
+            <small>
+              {change.stateName}
+              {change.afterRowNumber ? ` - linha nova ${change.afterRowNumber}` : ''}
+              {change.beforeRowNumber ? ` - linha antiga ${change.beforeRowNumber}` : ''}
+            </small>
+            {change.kind === 'state' ? (
+              <div className="comparison-diff-grid">
+                <div className="comparison-diff-row">
+                  <span>Estado</span>
+                  <p><b>Antes:</b> {change.before?.sheetName || '-'}</p>
+                  <p><b>Depois:</b> {change.after?.sheetName || '-'}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="comparison-diff-grid">
+                {fieldsForChange(change).map((field) => (
+                  <div className="comparison-diff-row" key={field}>
+                    <span>{getComparisonFieldLabel(field)}</span>
+                    <p><b>Antes:</b> {formatFieldValue(change.before, field)}</p>
+                    <p><b>Depois:</b> {formatFieldValue(change.after, field)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -146,4 +191,32 @@ function Detail({ label, value, badge = false, color = '' }) {
       </span>
     </div>
   );
+}
+
+function formatChangeTitle(change) {
+  if (change.kind === 'state') {
+    if (change.type === 'added') return 'Estado adicionado';
+    if (change.type === 'removed') return 'Estado removido';
+    return 'Estado alterado';
+  }
+  if (change.type === 'added') return 'Transicao adicionada';
+  if (change.type === 'removed') return 'Transicao removida';
+  return change.changedFields.map(getComparisonFieldLabel).join(', ');
+}
+
+function fieldsForChange(change) {
+  if (change.type === 'added' || change.type === 'removed') {
+    return ['destination', 'prompt', 'bi', 'conditions', 'observation'];
+  }
+  return change.changedFields ?? [];
+}
+
+function formatFieldValue(transition, field) {
+  if (!transition) return '-';
+  if (field === 'destination') return transition.to || 'Destino vazio';
+  if (field === 'prompt') return transition.prompt || 'Sem prompt';
+  if (field === 'bi') return transition.biCode || transition.biDescription || transition.bi || 'Sem B.I.';
+  if (field === 'conditions') return transition.conditions?.join(' > ') || 'Sem condicoes';
+  if (field === 'observation') return transition.observation || 'Sem observacao';
+  return '-';
 }

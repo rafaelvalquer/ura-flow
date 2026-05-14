@@ -1,5 +1,9 @@
 export function nodeClass(baseClassName, data) {
-  return data?.changeColor ? `${baseClassName} change-colored-node` : baseClassName;
+  return [
+    baseClassName,
+    data?.changeColor ? 'change-colored-node' : '',
+    data?.hasComparisonChange ? 'comparison-changed-node' : '',
+  ].filter(Boolean).join(' ');
 }
 
 export function nodeStyle(data) {

@@ -6,16 +6,22 @@ import FlowCanvas from "./components/FlowCanvas";
 import DetailsPanel from "./components/DetailsPanel";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import GlobalSearchPanel from "./components/GlobalSearchPanel";
+import ComparisonPanel from "./components/ComparisonPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import Toolbar from "./components/Toolbar";
-import AccordionSection from "./components/AccordionSection";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
+import { compareSpecs } from "./services/compareSpecs.js";
 import { exportFlowToPng } from "./services/imageExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
 
 export default function App() {
   const [parsedData, setParsedData] = useState(null);
+  const [appMode, setAppMode] = useState("analysis");
+  const [comparisonPreviousData, setComparisonPreviousData] = useState(null);
+  const [comparisonNextData, setComparisonNextData] = useState(null);
+  const [comparisonSearch, setComparisonSearch] = useState("");
+  const [comparisonFilter, setComparisonFilter] = useState("all");
   const [selectedState, setSelectedState] = useState("");
   const [viewMode, setViewMode] = useState("stateView");
   const [search, setSearch] = useState("");
@@ -48,9 +54,23 @@ export default function App() {
   });
   const canvasRef = useRef(null);
 
+  const comparison = useMemo(
+    () => compareSpecs(comparisonPreviousData, comparisonNextData),
+    [comparisonPreviousData, comparisonNextData],
+  );
+
+  const comparisonChangesByTransitionId = useMemo(
+    () => buildComparisonChangeIndex(comparison),
+    [comparison],
+  );
+
   const rawGraph = useMemo(
-    () => buildFlow(parsedData, selectedState, viewMode, { showChangeColors, showBiMarkings }),
-    [parsedData, selectedState, viewMode, showChangeColors, showBiMarkings],
+    () => buildFlow(parsedData, selectedState, viewMode, {
+      showChangeColors,
+      showBiMarkings,
+      comparisonChanges: appMode === "comparison" ? comparisonChangesByTransitionId : {},
+    }),
+    [parsedData, selectedState, viewMode, showChangeColors, showBiMarkings, appMode, comparisonChangesByTransitionId],
   );
 
   const positionStorageKey = useMemo(
@@ -80,6 +100,7 @@ export default function App() {
     setFocusRequest(null);
     try {
       const result = await parseExcelFile(file, setLoadingProgress);
+      setAppMode("analysis");
       setParsedData(result);
       setSelectedState(result.states[0]?.sheetName ?? "");
       setSearch("");
@@ -100,8 +121,55 @@ export default function App() {
     }
   }
 
+  async function handleComparisonFileSelected(slot, file) {
+    setAppMode("comparison");
+    setLoading(true);
+    setLoadingFileName(file.name);
+    setLoadingProgress({
+      percent: 0,
+      stage: "Lendo arquivo",
+      sheetName: "",
+      currentSheet: 0,
+      totalSheets: 0,
+    });
+    setError("");
+    setSelection(null);
+    setFocusRequest(null);
+    try {
+      const result = await parseExcelFile(file, setLoadingProgress);
+
+      if (slot === "previous") {
+        setComparisonPreviousData(result);
+      } else {
+        setComparisonNextData(result);
+        setParsedData(result);
+        setSelectedState(result.states[0]?.sheetName ?? "");
+        setSearch("");
+        setGlobalSearch("");
+        setFilter("all");
+      }
+    } catch (caught) {
+      setError(caught?.message ?? "Nao foi possivel processar o arquivo.");
+    } finally {
+      setLoading(false);
+      setLoadingFileName("");
+      setLoadingProgress({
+        percent: 0,
+        stage: "",
+        sheetName: "",
+        currentSheet: 0,
+        totalSheets: 0,
+      });
+    }
+  }
+
   function handleClear() {
     setParsedData(null);
+    setComparisonPreviousData(null);
+    setComparisonNextData(null);
+    setComparisonSearch("");
+    setComparisonFilter("all");
+    setAppMode("analysis");
     setSelectedState("");
     setSelection(null);
     setFocusRequest(null);
@@ -141,6 +209,20 @@ export default function App() {
     setFocusRequest(null);
   }
 
+  function handleAppModeChange(nextMode) {
+    setAppMode(nextMode);
+    setSelection(null);
+    setFocusRequest(null);
+    if (nextMode === "comparison" && comparisonNextData) {
+      setParsedData(comparisonNextData);
+      setSelectedState((current) => (
+        comparisonNextData.states.some((state) => state.sheetName === current)
+          ? current
+          : comparisonNextData.states[0]?.sheetName ?? ""
+      ));
+    }
+  }
+
   function handleWarningClick(warning) {
     if (!warning?.sheetName) return;
     setSelectedState(warning.sheetName);
@@ -174,6 +256,37 @@ export default function App() {
       type: item.warningType,
       nonce: Date.now(),
     });
+  }
+
+  function handleComparisonChangeSelect(change) {
+    setAppMode("comparison");
+    setSelection({
+      kind: "comparacao",
+      label: formatComparisonSelectionLabel(change),
+      data: {
+        nodeType: "comparison",
+        comparisonChanges: [change],
+        transition: change.after ?? change.before,
+        transitions: [change.after ?? change.before].filter(Boolean),
+      },
+    });
+
+    if (!change.after || !comparisonNextData) return;
+
+    setParsedData(comparisonNextData);
+    setSelectedState(change.stateName);
+
+    if (change.kind === "transition") {
+      setFocusRequest({
+        kind: "comparison",
+        sheetName: change.stateName,
+        rowNumber: change.after.rowNumber,
+        transitionId: change.after.id,
+        nonce: Date.now(),
+      });
+    } else {
+      setFocusRequest(null);
+    }
   }
 
   function handleOpenOccurrence(transition) {
@@ -241,12 +354,49 @@ export default function App() {
         <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
           {!isFocusMode && (
             <aside className="left-sidebar">
-              <UploadPanel
-                onFileSelected={handleFileSelected}
-                isLoading={isLoading}
-                isOpen={sidebarAccordions.upload}
-                onToggle={() => toggleSidebarAccordion("upload")}
-              />
+              <section className="panel-section mode-panel">
+                <div className="section-header">
+                  <h2>Modo</h2>
+                </div>
+                <div className="segmented-control">
+                  <button
+                    type="button"
+                    className={appMode === "analysis" ? "active" : ""}
+                    onClick={() => handleAppModeChange("analysis")}
+                  >
+                    Analise
+                  </button>
+                  <button
+                    type="button"
+                    className={appMode === "comparison" ? "active" : ""}
+                    onClick={() => handleAppModeChange("comparison")}
+                  >
+                    Comparacao
+                  </button>
+                </div>
+              </section>
+              {appMode === "analysis" ? (
+                <UploadPanel
+                  onFileSelected={handleFileSelected}
+                  isLoading={isLoading}
+                  isOpen={sidebarAccordions.upload}
+                  onToggle={() => toggleSidebarAccordion("upload")}
+                />
+              ) : (
+                <ComparisonPanel
+                  previousData={comparisonPreviousData}
+                  nextData={comparisonNextData}
+                  comparison={comparison}
+                  search={comparisonSearch}
+                  filter={comparisonFilter}
+                  isLoading={isLoading}
+                  onSearchChange={setComparisonSearch}
+                  onFilterChange={setComparisonFilter}
+                  onUploadPrevious={(file) => handleComparisonFileSelected("previous", file)}
+                  onUploadNext={(file) => handleComparisonFileSelected("next", file)}
+                  onSelectChange={handleComparisonChangeSelect}
+                />
+              )}
               {error && <div className="error-banner">{error}</div>}
               <section className="panel-section view-panel">
                 <div className="section-header">
@@ -258,12 +408,14 @@ export default function App() {
               </section>
               {parsedData && (
                 <>
-                  <GlobalSearchPanel
-                    items={globalIndex}
-                    search={globalSearch}
-                    onSearchChange={setGlobalSearch}
-                    onSelect={handleGlobalResultSelect}
-                  />
+                  {appMode === "analysis" && (
+                    <GlobalSearchPanel
+                      items={globalIndex}
+                      search={globalSearch}
+                      onSearchChange={setGlobalSearch}
+                      onSelect={handleGlobalResultSelect}
+                    />
+                  )}
                   <StateList
                     states={parsedData.states}
                     sheetNames={parsedData.sheetNames}
@@ -280,17 +432,19 @@ export default function App() {
                     isOpen={sidebarAccordions.states}
                     onToggle={() => toggleSidebarAccordion("states")}
                   />
-                  <DiagnosticsPanel
-                    diagnostics={parsedData.diagnostics}
-                    states={parsedData.states}
-                    sheetNames={parsedData.sheetNames}
-                    selectedState={selectedState}
-                    scope={diagnosticsScope}
-                    onScopeChange={setDiagnosticsScope}
-                    onWarningClick={handleWarningClick}
-                    isOpen={sidebarAccordions.diagnostics}
-                    onToggle={() => toggleSidebarAccordion("diagnostics")}
-                  />
+                  {appMode === "analysis" && (
+                    <DiagnosticsPanel
+                      diagnostics={parsedData.diagnostics}
+                      states={parsedData.states}
+                      sheetNames={parsedData.sheetNames}
+                      selectedState={selectedState}
+                      scope={diagnosticsScope}
+                      onScopeChange={setDiagnosticsScope}
+                      onWarningClick={handleWarningClick}
+                      isOpen={sidebarAccordions.diagnostics}
+                      onToggle={() => toggleSidebarAccordion("diagnostics")}
+                    />
+                  )}
                 </>
               )}
             </aside>
@@ -442,6 +596,22 @@ function makeSearchItem({ text, ...item }) {
     ...item,
     searchKey: normalizeKey(`${text} ${item.title} ${item.subtitle} ${item.meta}`),
   };
+}
+
+function buildComparisonChangeIndex(comparison) {
+  if (!comparison?.transitionChanges?.length) return {};
+
+  return comparison.transitionChanges.reduce((index, change) => {
+    if (!change.after?.id) return index;
+    index[change.after.id] = [...(index[change.after.id] ?? []), change];
+    return index;
+  }, {});
+}
+
+function formatComparisonSelectionLabel(change) {
+  if (change.kind === "state") return change.stateName;
+  const transition = change.after ?? change.before;
+  return `${change.stateName} - ${transition?.to ?? "transicao"}`;
 }
 
 function makePositionStorageKey(fileName, selectedState, viewMode, nodes) {

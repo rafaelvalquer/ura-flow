@@ -2,15 +2,16 @@ import { useState } from 'react';
 
 const LEGEND_ITEMS = [
   ['legend-state', 'Estado URA'],
-  ['legend-condition', 'Condição'],
+  ['legend-condition', 'Condicao'],
   ['legend-terminal', 'Tchau / terminal'],
-  ['legend-transfer', 'Transferência'],
-  ['legend-unknown', 'Destino não encontrado'],
-  ['legend-bi', 'Marcação URA'],
-  ['legend-change', 'Alteração coluna B'],
+  ['legend-transfer', 'Transferencia'],
+  ['legend-unknown', 'Destino nao encontrado'],
+  ['legend-bi', 'Marcacao URA'],
+  ['legend-change', 'Alteracao coluna B'],
+  ['legend-comparison', 'Mudanca entre specs'],
   ['legend-incoming', 'Edge de entrada'],
-  ['legend-outgoing', 'Edge de saída'],
-  ['legend-alert', 'Alerta diagnóstico'],
+  ['legend-outgoing', 'Edge de saida'],
+  ['legend-alert', 'Alerta diagnostico'],
 ];
 
 export default function FlowLegend() {

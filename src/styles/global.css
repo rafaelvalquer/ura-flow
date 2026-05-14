@@ -684,6 +684,7 @@ button:disabled {
 .legend-unknown { border-color: #ef4444 !important; background: #fef2f2 !important; }
 .legend-bi { border-color: #10b981 !important; background: #f0fdfa !important; }
 .legend-change { border-color: #7c3aed !important; background: #f5f3ff !important; }
+.legend-comparison { border-color: #8b5cf6 !important; background: #ede9fe !important; }
 .legend-incoming,
 .legend-outgoing {
   height: 0 !important;
@@ -906,6 +907,13 @@ button:disabled {
   stroke: #10b981;
 }
 
+.custom-node.comparison-changed-node {
+  border-color: #8b5cf6;
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.14),
+    0 10px 22px rgba(15, 23, 42, 0.14);
+}
+
 .edge-empty-prompt path {
   stroke: #dc2626;
   stroke-width: 2.6;
@@ -919,6 +927,22 @@ button:disabled {
 
 .edge-empty-prompt .react-flow__edge-text {
   fill: #991b1b;
+  font-weight: 900;
+}
+
+.edge-comparison-change path {
+  stroke: #8b5cf6;
+  stroke-width: 3;
+}
+
+.edge-comparison-change .react-flow__edge-textbg {
+  fill: #f5f3ff;
+  stroke: #c4b5fd;
+  stroke-width: 1.5;
+}
+
+.edge-comparison-change .react-flow__edge-text {
+  fill: #5b21b6;
   font-weight: 900;
 }
 
@@ -1060,6 +1084,203 @@ button:disabled {
 
 .global-search-panel {
   min-height: 180px;
+}
+
+.mode-panel .segmented-control button {
+  flex: 1;
+}
+
+.comparison-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comparison-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.comparison-upload-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 9px;
+  background: #f8fafc;
+}
+
+.comparison-upload-card span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.comparison-upload-card strong {
+  min-height: 30px;
+  overflow: hidden;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.comparison-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.comparison-summary {
+  margin-top: 2px;
+}
+
+.comparison-search .search-input {
+  margin-bottom: 0;
+}
+
+.comparison-filters {
+  margin-top: -2px;
+}
+
+.comparison-change-list,
+.comparison-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.comparison-change-list {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.comparison-change-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+  text-align: left;
+}
+
+.comparison-change-item:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.comparison-change-item.added {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.comparison-change-item.removed {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.comparison-change-item[class*="changed"] {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+}
+
+.comparison-change-item strong,
+.comparison-change-item small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comparison-change-item strong {
+  color: #111827;
+  font-size: 12px;
+}
+
+.comparison-change-item small {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.change-type-pill {
+  border-radius: 999px;
+  border: 1px solid #c4b5fd;
+  background: #ffffff;
+  color: #5b21b6;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.comparison-detail-block {
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f5f3ff;
+}
+
+.comparison-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.comparison-detail-card strong {
+  color: #4c1d95;
+  font-size: 12px;
+}
+
+.comparison-detail-card small {
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.comparison-diff-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.comparison-diff-row {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 7px;
+}
+
+.comparison-diff-row span {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.comparison-diff-row p {
+  margin: 0;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .global-results,
