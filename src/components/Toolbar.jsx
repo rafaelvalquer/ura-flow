@@ -1,4 +1,4 @@
-import { BadgeCheck, FileDown, GitBranch, ImageDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
+import { BadgeCheck, GitBranch, ImageDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
 
 export default function Toolbar({
   fileName,
@@ -13,7 +13,6 @@ export default function Toolbar({
   onToggleBreadcrumb,
   onToggleFocusMode,
   onOrganize,
-  onExport,
   onExportImage,
   onClear,
   canExport,
@@ -64,11 +63,7 @@ export default function Toolbar({
           <LayoutGrid size={16} />
           Organizar
         </button>
-        <button className="secondary-button" type="button" onClick={onExport} disabled={!canExport}>
-          <FileDown size={16} />
-          Exportar PDF
-        </button>
-        <button className="ghost-button" type="button" onClick={onExportImage} disabled={!canExport}>
+        <button className="secondary-button" type="button" onClick={onExportImage} disabled={!canExport}>
           <ImageDown size={16} />
           Exportar PNG
         </button>

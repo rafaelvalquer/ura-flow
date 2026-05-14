@@ -11,7 +11,7 @@ import Toolbar from "./components/Toolbar";
 import AccordionSection from "./components/AccordionSection";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
-import { exportFlowToImage, exportFlowToPdf } from "./services/pdfExporter.js";
+import { exportFlowToPng } from "./services/imageExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
 
 export default function App() {
@@ -207,18 +207,9 @@ export default function App() {
     saveNodePositions(positionStorageKey, nodes);
   }
 
-  async function handleExport() {
-    await exportFlowToPdf(canvasRef.current, {
-      stateName: selectedState,
-      viewMode,
-      nodes: graph.nodes,
-    });
-  }
-
   async function handleExportImage() {
-    await exportFlowToImage(canvasRef.current, {
+    await exportFlowToPng(canvasRef.current, {
       stateName: selectedState,
-      viewMode,
       nodes: graph.nodes,
     });
   }
@@ -240,7 +231,6 @@ export default function App() {
           onToggleBreadcrumb={() => setShowBreadcrumb((value) => !value)}
           onToggleFocusMode={() => setFocusMode((value) => !value)}
           onOrganize={handleOrganize}
-          onExport={handleExport}
           onExportImage={handleExportImage}
           onClear={handleClear}
           canExport={graph.nodes.length > 0}
