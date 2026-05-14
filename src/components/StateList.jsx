@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Headphones, PhoneOff } from 'lucide-react';
+import AccordionSection from './AccordionSection.jsx';
 import { classifyDestination } from '../utils/classifyDestination.js';
 
 const FILTERS = [
@@ -18,17 +19,21 @@ export default function StateList({
   onSearchChange,
   filter,
   onFilterChange,
+  isOpen = true,
+  onToggle,
 }) {
   const filteredStates = states
     .filter((state) => state.sheetName.toLowerCase().includes(search.toLowerCase()))
     .filter((state) => matchesFilter(state, sheetNames, filter));
 
   return (
-    <section className="panel-section state-list-section">
-      <div className="section-header">
-        <h2>Estados</h2>
-        <span>{filteredStates.length}</span>
-      </div>
+    <AccordionSection
+      title="Estados"
+      badge={filteredStates.length}
+      className="state-list-section"
+      isOpen={isOpen}
+      onToggle={onToggle}
+    >
       <input
         className="search-input"
         placeholder="Buscar estado"
@@ -68,7 +73,7 @@ export default function StateList({
           );
         })}
       </div>
-    </section>
+    </AccordionSection>
   );
 }
 

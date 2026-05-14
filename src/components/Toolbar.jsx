@@ -1,17 +1,20 @@
-import { FileDown, GitBranch, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
+import { BadgeCheck, FileDown, GitBranch, ImageDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
 
 export default function Toolbar({
   fileName,
   selectedState,
   viewMode,
   showChangeColors,
+  showBiMarkings,
   showBreadcrumb,
   isFocusMode,
   onToggleChangeColors,
+  onToggleBiMarkings,
   onToggleBreadcrumb,
   onToggleFocusMode,
   onOrganize,
   onExport,
+  onExportImage,
   onClear,
   canExport,
   canOrganize,
@@ -39,6 +42,16 @@ export default function Toolbar({
           <Palette size={16} />
           {showChangeColors ? 'Ocultar alteracoes' : 'Destacar alteracoes'}
         </button>
+        <button
+          className={`ghost-button ${showBiMarkings ? 'active-highlight' : ''}`}
+          type="button"
+          onClick={onToggleBiMarkings}
+          disabled={!canExport}
+          title="Mostrar ou ocultar nodes de Marcacao URA no fluxo"
+        >
+          <BadgeCheck size={16} />
+          {showBiMarkings ? 'Ocultar B.I.' : 'Mostrar B.I.'}
+        </button>
         <button className={`ghost-button ${showBreadcrumb ? 'active-highlight' : ''}`} type="button" onClick={onToggleBreadcrumb}>
           <GitBranch size={16} />
           {showBreadcrumb ? 'Ocultar caminho' : 'Mostrar caminho'}
@@ -54,6 +67,10 @@ export default function Toolbar({
         <button className="secondary-button" type="button" onClick={onExport} disabled={!canExport}>
           <FileDown size={16} />
           Exportar PDF
+        </button>
+        <button className="ghost-button" type="button" onClick={onExportImage} disabled={!canExport}>
+          <ImageDown size={16} />
+          Exportar PNG
         </button>
         <button className="ghost-button" type="button" onClick={onClear}>
           <RotateCcw size={16} />

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { UploadCloud } from 'lucide-react';
+import AccordionSection from './AccordionSection.jsx';
 
-export default function UploadPanel({ onFileSelected, isLoading }) {
+export default function UploadPanel({ onFileSelected, isLoading, isOpen = true, onToggle }) {
   const inputRef = useRef(null);
   const [isDragging, setDragging] = useState(false);
 
@@ -11,19 +12,7 @@ export default function UploadPanel({ onFileSelected, isLoading }) {
   };
 
   return (
-    <section
-      className={`upload-panel ${isDragging ? 'is-dragging' : ''}`}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        setDragging(false);
-        handleFiles(event.dataTransfer.files);
-      }}
-    >
+    <>
       <input
         ref={inputRef}
         className="sr-only"
@@ -31,12 +20,38 @@ export default function UploadPanel({ onFileSelected, isLoading }) {
         accept=".xlsx"
         onChange={(event) => handleFiles(event.target.files)}
       />
-      <UploadCloud size={24} />
-      <strong>Enviar spec Excel</strong>
-      <span>Arraste um arquivo .xlsx ou selecione no computador.</span>
-      <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()} disabled={isLoading}>
-        {isLoading ? 'Processando...' : 'Selecionar arquivo'}
-      </button>
-    </section>
+      <AccordionSection
+        title="Enviar spec Excel"
+        className="upload-accordion"
+        isOpen={isOpen}
+        onToggle={onToggle}
+        collapsedContent={(
+          <button type="button" className="secondary-button full-width-button" onClick={() => inputRef.current?.click()} disabled={isLoading}>
+            {isLoading ? 'Processando...' : 'Selecionar arquivo'}
+          </button>
+        )}
+      >
+        <div
+          className={`upload-panel ${isDragging ? 'is-dragging' : ''}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            handleFiles(event.dataTransfer.files);
+          }}
+        >
+          <UploadCloud size={24} />
+          <strong>Enviar spec Excel</strong>
+          <span>Arraste um arquivo .xlsx ou selecione no computador.</span>
+          <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()} disabled={isLoading}>
+            {isLoading ? 'Processando...' : 'Selecionar arquivo'}
+          </button>
+        </div>
+      </AccordionSection>
+    </>
   );
 }

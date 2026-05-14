@@ -1,4 +1,5 @@
 import { Activity, AlertTriangle } from 'lucide-react';
+import AccordionSection from './AccordionSection.jsx';
 import { classifyDestination } from '../utils/classifyDestination.js';
 import { normalizeKey } from '../utils/normalizeText.js';
 
@@ -10,6 +11,8 @@ export default function DiagnosticsPanel({
   scope = 'state',
   onScopeChange,
   onWarningClick,
+  isOpen = true,
+  onToggle,
 }) {
   if (!diagnostics) return null;
 
@@ -26,12 +29,15 @@ export default function DiagnosticsPanel({
     : 'Mostrando alertas do documento inteiro';
 
   return (
-    <section className="panel-section diagnostics-panel">
-      <div className="section-header">
-        <h2>Diagnóstico</h2>
-        <Activity size={16} />
-      </div>
-
+    <AccordionSection
+      title="Diagnostico"
+      badge={warnings.length}
+      className="diagnostics-panel"
+      isOpen={isOpen}
+      onToggle={onToggle}
+      icon={<Activity size={16} />}
+      collapsedContent={<p className="diagnostics-context compact">{contextText}.</p>}
+    >
       <div className="segmented-control diagnostics-scope">
         <button
           type="button"
@@ -84,7 +90,7 @@ export default function DiagnosticsPanel({
           <div className="warning-more">+ {warnings.length - 18} alertas adicionais</div>
         )}
       </div>
-    </section>
+    </AccordionSection>
   );
 }
 
@@ -92,26 +98,26 @@ function buildDocumentStats(diagnostics) {
   return [
     ['Abas', diagnostics.totalSheets],
     ['Estados processados', diagnostics.processedStates],
-    ['Transições', diagnostics.totalTransitions],
-    ['Não encontrados', diagnostics.unknownDestinations],
+    ['Transicoes', diagnostics.totalTransitions],
+    ['Nao encontrados', diagnostics.unknownDestinations],
     ['Prompts vazios', diagnostics.emptyPrompts],
     ['Tchau', diagnostics.terminalTransitions],
-    ['Transferências', diagnostics.transfers],
+    ['Transferencias', diagnostics.transfers],
   ];
 }
 
 function buildStateStats(state, sheetNames, warnings) {
   const transitions = state?.transitions ?? [];
   return [
-    ['Transições', transitions.length],
+    ['Transicoes', transitions.length],
     ['Alertas', warnings.length],
     [
-      'Não encontrados',
+      'Nao encontrados',
       transitions.filter((transition) => classifyDestination(transition.to, sheetNames, state.sheetName) === 'unknown').length,
     ],
     ['Prompts vazios', transitions.filter((transition) => !transition.prompt).length],
     ['Tchau', transitions.filter((transition) => normalizeKey(transition.to) === 'tchau').length],
-    ['Transferências', transitions.filter((transition) => normalizeKey(transition.to).includes('transfer')).length],
+    ['Transferencias', transitions.filter((transition) => normalizeKey(transition.to).includes('transfer')).length],
   ];
 }
 
@@ -119,5 +125,5 @@ function formatWarningMeta(warning) {
   const parts = [];
   if (warning.sheetName) parts.push(warning.sheetName);
   if (warning.rowNumber) parts.push(`linha ${warning.rowNumber}`);
-  return parts.length ? `${parts.join(' · ')}: ` : '';
+  return parts.length ? `${parts.join(' - ')}: ` : '';
 }

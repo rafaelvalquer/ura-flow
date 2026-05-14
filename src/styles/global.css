@@ -306,6 +306,78 @@ button:disabled {
   padding: 14px;
 }
 
+.accordion-section {
+  padding: 12px;
+}
+
+.accordion-header {
+  width: 100%;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.accordion-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accordion-title h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.accordion-title em {
+  color: #6b7280;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.accordion-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+}
+
+.accordion-actions svg:last-child {
+  transition: transform 160ms ease;
+}
+
+.accordion-section.is-open .accordion-actions svg:last-child {
+  transform: rotate(180deg);
+}
+
+.accordion-content,
+.accordion-collapsed-content {
+  margin-top: 12px;
+}
+
+.accordion-collapsed-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compact-controls {
+  margin-top: 0;
+}
+
+.full-width-button {
+  width: 100%;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -368,6 +440,10 @@ button:disabled {
   font-weight: 700;
 }
 
+.diagnostics-context.compact {
+  margin: 0;
+}
+
 .segmented-control button,
 .filter-chip {
   border: 1px solid #e5e7eb;
@@ -419,6 +495,12 @@ button:disabled {
 
 .state-list-section {
   min-height: 300px;
+}
+
+.state-list-section.is-collapsed,
+.diagnostics-panel.is-collapsed,
+.upload-accordion.is-collapsed {
+  min-height: 0;
 }
 
 .state-list {
@@ -822,6 +904,22 @@ button:disabled {
 
 .edge-bi path {
   stroke: #10b981;
+}
+
+.edge-empty-prompt path {
+  stroke: #dc2626;
+  stroke-width: 2.6;
+}
+
+.edge-empty-prompt .react-flow__edge-textbg {
+  fill: #fef2f2;
+  stroke: #fca5a5;
+  stroke-width: 1.4;
+}
+
+.edge-empty-prompt .react-flow__edge-text {
+  fill: #991b1b;
+  font-weight: 900;
 }
 
 .edge-connected path {

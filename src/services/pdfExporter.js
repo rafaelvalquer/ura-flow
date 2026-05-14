@@ -18,7 +18,21 @@ const NODE_SIZES = {
   default: { width: 230, height: 86 },
 };
 
-export async function exportFlowToPdf(element, { stateName, viewMode, nodes = [] }) {
+export async function exportFlowToPdf(element, options) {
+  const { canvas, exportWidth, exportHeight } = await captureFlowCanvas(element, options);
+  const pdf = buildSinglePagePdf(canvas, { exportWidth, exportHeight });
+  pdf.save(`ura-flow-${sanitizeFileName(options?.stateName || 'estado')}.pdf`);
+}
+
+export async function exportFlowToImage(element, options) {
+  const { canvas } = await captureFlowCanvas(element, options);
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = `ura-flow-${sanitizeFileName(options?.stateName || 'estado')}.png`;
+  link.click();
+}
+
+async function captureFlowCanvas(element, { stateName, viewMode, nodes = [] } = {}) {
   if (!element) throw new Error('Area do fluxo nao encontrada para exportacao.');
 
   const reactFlow = element.querySelector('.react-flow');
@@ -59,8 +73,7 @@ export async function exportFlowToPdf(element, { stateName, viewMode, nodes = []
       logging: false,
     });
 
-    const pdf = buildSinglePagePdf(canvas, { exportWidth, exportHeight });
-    pdf.save(`ura-flow-${sanitizeFileName(stateName || 'estado')}.pdf`);
+    return { canvas, exportWidth, exportHeight };
   } finally {
     restore();
   }
@@ -185,6 +198,8 @@ function prepareElementForExport({
   saveStyles(records, viewport, ['transform', 'transformOrigin']);
   hiddenElements.forEach((item) => saveStyles(records, item, ['display']));
 
+  const restoreSvgStyles = inlineSvgEdgeStyles(element);
+
   element.style.width = `${exportWidth}px`;
   element.style.height = `${exportHeight}px`;
   element.style.minHeight = `${exportHeight}px`;
@@ -201,6 +216,59 @@ function prepareElementForExport({
 
   return () => {
     metadata.remove();
+    restoreSvgStyles();
+    records.reverse().forEach(({ element: target, property, value }) => {
+      target.style[property] = value;
+    });
+  };
+}
+
+function inlineSvgEdgeStyles(element) {
+  const records = [];
+  const svgItems = [
+    ...element.querySelectorAll('.react-flow__edges, .react-flow__edge, .react-flow__edge path, .react-flow__edge text, .react-flow__edge rect'),
+  ];
+
+  svgItems.forEach((item) => {
+    saveStyles(records, item, [
+      'display',
+      'visibility',
+      'opacity',
+      'overflow',
+      'stroke',
+      'strokeWidth',
+      'strokeDasharray',
+      'fill',
+      'fontWeight',
+    ]);
+
+    const computed = window.getComputedStyle(item);
+    item.style.display = computed.display === 'none' ? 'block' : computed.display;
+    item.style.visibility = 'visible';
+    item.style.opacity = computed.opacity || '1';
+    item.style.overflow = 'visible';
+
+    if (item instanceof SVGPathElement) {
+      item.style.stroke = computed.stroke && computed.stroke !== 'none' ? computed.stroke : '#64748b';
+      item.style.strokeWidth = computed.strokeWidth || '2px';
+      if (computed.strokeDasharray && computed.strokeDasharray !== 'none') {
+        item.style.strokeDasharray = computed.strokeDasharray;
+      }
+      item.style.fill = computed.fill === 'none' ? 'none' : computed.fill;
+    }
+
+    if (item instanceof SVGTextElement) {
+      item.style.fill = computed.fill && computed.fill !== 'none' ? computed.fill : '#111827';
+      item.style.fontWeight = computed.fontWeight || '700';
+    }
+
+    if (item instanceof SVGRectElement) {
+      item.style.fill = computed.fill && computed.fill !== 'none' ? computed.fill : '#ffffff';
+      item.style.stroke = computed.stroke && computed.stroke !== 'none' ? computed.stroke : '#e5e7eb';
+    }
+  });
+
+  return () => {
     records.reverse().forEach(({ element: target, property, value }) => {
       target.style[property] = value;
     });

@@ -8,15 +8,16 @@ export function buildFlow(parsedData, selectedStateName, mode = 'stateView', opt
   if (!parsedData || !selectedState) return { nodes: [], edges: [] };
 
   const showChangeColors = Boolean(options.showChangeColors);
+  const showBiMarkings = options.showBiMarkings !== false;
   const graph = mode === 'detailedView'
-    ? buildDetailedView(parsedData, selectedState, showChangeColors)
-    : buildStateView(parsedData, selectedState, showChangeColors);
+    ? buildDetailedView(parsedData, selectedState, showChangeColors, showBiMarkings)
+    : buildStateView(parsedData, selectedState, showChangeColors, showBiMarkings);
 
   const laidOut = layoutFlow(graph.nodes, graph.edges, mode);
   return { nodes: laidOut.nodes, edges: laidOut.edges };
 }
 
-function buildStateView(parsedData, state, showChangeColors) {
+function buildStateView(parsedData, state, showChangeColors, showBiMarkings) {
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
       role: 'origin',
@@ -46,7 +47,7 @@ function buildStateView(parsedData, state, showChangeColors) {
     const targetId = group.type === 'self' ? `state-${state.id}` : `target-${makeId(group.label)}-${index}`;
     const changeColors = getTransitionChangeColors(group.transitions);
     const changeColor = showChangeColors ? changeColors[0] : '';
-    const biMarkings = getTransitionBiMarkings(group.transitions);
+    const biMarkings = showBiMarkings ? getTransitionBiMarkings(group.transitions) : [];
 
     if (!nodeIds.has(targetId)) {
       nodes.push(makeNode(targetId, nodeTypeForDestination(group.type), group.label, {
@@ -79,6 +80,7 @@ function buildStateView(parsedData, state, showChangeColors) {
     }
 
     const prompts = [...new Set(group.transitions.map((item) => item.prompt).filter(Boolean))];
+    const hasEmptyPrompt = group.transitions.some((item) => !item.prompt);
     const first = group.transitions[0];
     edges.push(makeEdge({
       id: `edge-${state.id}-${targetId}`,
@@ -90,14 +92,15 @@ function buildStateView(parsedData, state, showChangeColors) {
       biMarkings,
       changeColors,
       type: group.type,
+      hasEmptyPrompt,
     }));
   });
 
   return { nodes, edges };
 }
 
-function buildDetailedView(parsedData, state, showChangeColors) {
-  if (state.decisionTree?.length) return buildDetailedViewFromTree(parsedData, state, showChangeColors);
+function buildDetailedView(parsedData, state, showChangeColors, showBiMarkings) {
+  if (state.decisionTree?.length) return buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings);
 
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
@@ -151,18 +154,21 @@ function buildDetailedView(parsedData, state, showChangeColors) {
       label: transition.prompt || 'Sem prompt',
       prompt: transition.prompt,
       transitions: [transition],
-      biMarkings: transition.hasBiMarking ? [transition] : [],
+      biMarkings: showBiMarkings && transition.hasBiMarking ? [transition] : [],
       changeColors: transition.changeColor ? [transition.changeColor] : [],
       type,
+      hasEmptyPrompt: !transition.prompt,
     }));
 
-    ensureTrailingBiNode({ nodes, edges, nodeIds, state, transition, sourceId: targetId, level: transition.conditions.length + 2 });
+    if (showBiMarkings) {
+      ensureTrailingBiNode({ nodes, edges, nodeIds, state, transition, sourceId: targetId, level: transition.conditions.length + 2 });
+    }
   });
 
   return { nodes, edges };
 }
 
-function buildDetailedViewFromTree(parsedData, state, showChangeColors) {
+function buildDetailedViewFromTree(parsedData, state, showChangeColors, showBiMarkings) {
   const nodes = [
     makeNode(`state-${state.id}`, 'stateNode', state.sheetName, {
       role: 'origin',
@@ -225,15 +231,16 @@ function buildDetailedViewFromTree(parsedData, state, showChangeColors) {
           id: `edge-${conditionId}-${targetId}-${decision.rowNumber}`,
           source: conditionId,
           target: targetId,
-          label: decision.prompt || decision.destination,
-          prompt: decision.prompt,
+          label: transition?.prompt || decision.prompt || decision.destination,
+          prompt: transition?.prompt || decision.prompt,
           transitions: transition ? [transition] : [],
-          biMarkings: transition?.hasBiMarking ? [transition] : [],
+          biMarkings: showBiMarkings && transition?.hasBiMarking ? [transition] : [],
           changeColors: transition?.changeColor ? [transition.changeColor] : [],
           type,
+          hasEmptyPrompt: !(transition?.prompt || decision.prompt),
         }));
 
-        if (transition) {
+        if (showBiMarkings && transition) {
           ensureTrailingBiNode({ nodes, edges, nodeIds, state, transition, sourceId: targetId, level: depth + 2 });
         }
       }
@@ -345,6 +352,7 @@ function makeEdge({
   sheetName = '',
   rowNumber = null,
   warningTargetRows = [],
+  hasEmptyPrompt = false,
 }) {
   const transitionRows = transitions.map((transition) => transition.rowNumber).filter(Boolean);
   const transitionIds = transitions.map((transition) => transition.id).filter(Boolean);
@@ -366,7 +374,7 @@ function makeEdge({
       transitionIds,
     },
     markerEnd: { type: MarkerType.ArrowClosed },
-    className: `flow-edge edge-${type}`,
+    className: `flow-edge edge-${type}${hasEmptyPrompt ? ' edge-empty-prompt' : ''}`,
     type: source === target ? 'default' : 'smoothstep',
   };
 }

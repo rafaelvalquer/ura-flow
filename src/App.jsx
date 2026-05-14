@@ -8,9 +8,10 @@ import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import GlobalSearchPanel from "./components/GlobalSearchPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import Toolbar from "./components/Toolbar";
+import AccordionSection from "./components/AccordionSection";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
-import { exportFlowToPdf } from "./services/pdfExporter.js";
+import { exportFlowToImage, exportFlowToPdf } from "./services/pdfExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
 
 export default function App() {
@@ -34,16 +35,22 @@ export default function App() {
   const [error, setError] = useState("");
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [showChangeColors, setShowChangeColors] = useState(false);
+  const [showBiMarkings, setShowBiMarkings] = useState(true);
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
   const [focusRequest, setFocusRequest] = useState(null);
   const [isDetailsCollapsed, setDetailsCollapsed] = useState(false);
   const [isFocusMode, setFocusMode] = useState(false);
   const [savedPositionsVersion, setSavedPositionsVersion] = useState(0);
+  const [sidebarAccordions, setSidebarAccordions] = useState({
+    upload: true,
+    states: true,
+    diagnostics: true,
+  });
   const canvasRef = useRef(null);
 
   const rawGraph = useMemo(
-    () => buildFlow(parsedData, selectedState, viewMode, { showChangeColors }),
-    [parsedData, selectedState, viewMode, showChangeColors],
+    () => buildFlow(parsedData, selectedState, viewMode, { showChangeColors, showBiMarkings }),
+    [parsedData, selectedState, viewMode, showChangeColors, showBiMarkings],
   );
 
   const positionStorageKey = useMemo(
@@ -79,7 +86,7 @@ export default function App() {
       setGlobalSearch("");
       setFilter("all");
     } catch (caught) {
-      setError(caught?.message ?? "Não foi possível processar o arquivo.");
+      setError(caught?.message ?? "Nao foi possivel processar o arquivo.");
     } finally {
       setLoading(false);
       setLoadingFileName("");
@@ -112,8 +119,26 @@ export default function App() {
       totalSheets: 0,
     });
     setShowChangeColors(false);
+    setShowBiMarkings(true);
     setShowBreadcrumb(true);
     setFocusMode(false);
+    setSidebarAccordions({
+      upload: true,
+      states: true,
+      diagnostics: true,
+    });
+  }
+
+  function toggleSidebarAccordion(key) {
+    setSidebarAccordions((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }
+
+  function handleViewModeChange(nextMode) {
+    setViewMode(nextMode);
+    setFocusRequest(null);
   }
 
   function handleWarningClick(warning) {
@@ -190,6 +215,14 @@ export default function App() {
     });
   }
 
+  async function handleExportImage() {
+    await exportFlowToImage(canvasRef.current, {
+      stateName: selectedState,
+      viewMode,
+      nodes: graph.nodes,
+    });
+  }
+
   return (
     <ReactFlowProvider>
       <div className="app-shell">
@@ -199,13 +232,16 @@ export default function App() {
           selectedState={selectedState}
           viewMode={viewMode}
           showChangeColors={showChangeColors}
+          showBiMarkings={showBiMarkings}
           showBreadcrumb={showBreadcrumb}
           isFocusMode={isFocusMode}
           onToggleChangeColors={() => setShowChangeColors((value) => !value)}
+          onToggleBiMarkings={() => setShowBiMarkings((value) => !value)}
           onToggleBreadcrumb={() => setShowBreadcrumb((value) => !value)}
           onToggleFocusMode={() => setFocusMode((value) => !value)}
           onOrganize={handleOrganize}
           onExport={handleExport}
+          onExportImage={handleExportImage}
           onClear={handleClear}
           canExport={graph.nodes.length > 0}
           canOrganize={graph.nodes.length > 0}
@@ -214,73 +250,60 @@ export default function App() {
 
         <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
           {!isFocusMode && (
-          <aside className="left-sidebar">
-            <UploadPanel
-              onFileSelected={handleFileSelected}
-              isLoading={isLoading}
-            />
-            {error && <div className="error-banner">{error}</div>}
-            <section className="panel-section">
-              <div className="section-header">
-                <h2>Visão</h2>
-              </div>
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={viewMode === "stateView" ? "active" : ""}
-                  onClick={() => {
-                    setViewMode("stateView");
-                    setFocusRequest(null);
-                  }}
-                >
-                  Por estado
-                </button>
-                <button
-                  type="button"
-                  className={viewMode === "detailedView" ? "active" : ""}
-                  onClick={() => {
-                    setViewMode("detailedView");
-                    setFocusRequest(null);
-                  }}
-                >
-                  Detalhada
-                </button>
-              </div>
-            </section>
-            {parsedData && (
-              <>
-                <GlobalSearchPanel
-                  items={globalIndex}
-                  search={globalSearch}
-                  onSearchChange={setGlobalSearch}
-                  onSelect={handleGlobalResultSelect}
-                />
-                <StateList
-                  states={parsedData.states}
-                  sheetNames={parsedData.sheetNames}
-                  selectedState={selectedState}
-                  onSelectState={(state) => {
-                    setSelectedState(state);
-                    setSelection(null);
-                    setFocusRequest(null);
-                  }}
-                  search={search}
-                  onSearchChange={setSearch}
-                  filter={filter}
-                  onFilterChange={setFilter}
-                />
-                <DiagnosticsPanel
-                  diagnostics={parsedData.diagnostics}
-                  states={parsedData.states}
-                  sheetNames={parsedData.sheetNames}
-                  selectedState={selectedState}
-                  scope={diagnosticsScope}
-                  onScopeChange={setDiagnosticsScope}
-                  onWarningClick={handleWarningClick}
-                />
-              </>
-            )}
-          </aside>
+            <aside className="left-sidebar">
+              <UploadPanel
+                onFileSelected={handleFileSelected}
+                isLoading={isLoading}
+                isOpen={sidebarAccordions.upload}
+                onToggle={() => toggleSidebarAccordion("upload")}
+              />
+              {error && <div className="error-banner">{error}</div>}
+              <section className="panel-section view-panel">
+                <div className="section-header">
+                  <h2>Visao</h2>
+                </div>
+                <div className="segmented-control">
+                  <ViewModeButtons viewMode={viewMode} onChange={handleViewModeChange} />
+                </div>
+              </section>
+              {parsedData && (
+                <>
+                  <GlobalSearchPanel
+                    items={globalIndex}
+                    search={globalSearch}
+                    onSearchChange={setGlobalSearch}
+                    onSelect={handleGlobalResultSelect}
+                  />
+                  <StateList
+                    states={parsedData.states}
+                    sheetNames={parsedData.sheetNames}
+                    selectedState={selectedState}
+                    onSelectState={(state) => {
+                      setSelectedState(state);
+                      setSelection(null);
+                      setFocusRequest(null);
+                    }}
+                    search={search}
+                    onSearchChange={setSearch}
+                    filter={filter}
+                    onFilterChange={setFilter}
+                    isOpen={sidebarAccordions.states}
+                    onToggle={() => toggleSidebarAccordion("states")}
+                  />
+                  <DiagnosticsPanel
+                    diagnostics={parsedData.diagnostics}
+                    states={parsedData.states}
+                    sheetNames={parsedData.sheetNames}
+                    selectedState={selectedState}
+                    scope={diagnosticsScope}
+                    onScopeChange={setDiagnosticsScope}
+                    onWarningClick={handleWarningClick}
+                    isOpen={sidebarAccordions.diagnostics}
+                    onToggle={() => toggleSidebarAccordion("diagnostics")}
+                  />
+                </>
+              )}
+            </aside>
           )}
 
           <FlowCanvas
@@ -297,16 +320,37 @@ export default function App() {
           />
 
           {!isFocusMode && (
-          <DetailsPanel
-            selection={selection}
-            isCollapsed={isDetailsCollapsed}
-            onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
-            onOpenOccurrence={handleOpenOccurrence}
-          />
+            <DetailsPanel
+              selection={selection}
+              isCollapsed={isDetailsCollapsed}
+              onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
+              onOpenOccurrence={handleOpenOccurrence}
+            />
           )}
         </div>
       </div>
     </ReactFlowProvider>
+  );
+}
+
+function ViewModeButtons({ viewMode, onChange }) {
+  return (
+    <>
+      <button
+        type="button"
+        className={viewMode === "stateView" ? "active" : ""}
+        onClick={() => onChange("stateView")}
+      >
+        Por estado
+      </button>
+      <button
+        type="button"
+        className={viewMode === "detailedView" ? "active" : ""}
+        onClick={() => onChange("detailedView")}
+      >
+        Detalhada
+      </button>
+    </>
   );
 }
 
@@ -327,7 +371,7 @@ function buildGlobalIndex(parsedData) {
     }));
 
     state.transitions.forEach((transition) => {
-      const lineMeta = `${state.sheetName} · linha ${transition.rowNumber}`;
+      const lineMeta = `${state.sheetName} - linha ${transition.rowNumber}`;
 
       items.push(makeSearchItem({
         id: `dest-${transition.id}`,
@@ -392,7 +436,7 @@ function buildGlobalIndex(parsedData) {
       type: "warning",
       title: warning.message,
       subtitle: warning.type,
-      meta: warning.rowNumber ? `${warning.sheetName} · linha ${warning.rowNumber}` : warning.sheetName,
+      meta: warning.rowNumber ? `${warning.sheetName} - linha ${warning.rowNumber}` : warning.sheetName,
       sheetName: warning.sheetName,
       rowNumber: warning.rowNumber,
       warningType: warning.type,
