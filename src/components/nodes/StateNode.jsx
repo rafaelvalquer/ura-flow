@@ -4,8 +4,12 @@ import { nodeClass, nodeStyle } from './nodeStyle';
 import NodeBadges from './NodeBadges';
 
 export default function StateNode({ data }) {
+  const title = data.isNavigableDestination
+    ? `Duplo clique para abrir ${data.navigateToState}`
+    : undefined;
+
   return (
-    <div className={nodeClass('custom-node state-node', data)} style={nodeStyle(data)}>
+    <div className={nodeClass('custom-node state-node', data)} style={nodeStyle(data)} title={title}>
       <Handle type="target" position={Position.Left} />
       <div className="node-title">
         <RadioTower size={16} />

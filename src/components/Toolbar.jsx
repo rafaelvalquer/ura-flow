@@ -1,12 +1,14 @@
-import { FileDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
+import { FileDown, GitBranch, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
 
 export default function Toolbar({
   fileName,
   selectedState,
   viewMode,
   showChangeColors,
+  showBreadcrumb,
   isFocusMode,
   onToggleChangeColors,
+  onToggleBreadcrumb,
   onToggleFocusMode,
   onOrganize,
   onExport,
@@ -36,6 +38,10 @@ export default function Toolbar({
         >
           <Palette size={16} />
           {showChangeColors ? 'Ocultar alteracoes' : 'Destacar alteracoes'}
+        </button>
+        <button className={`ghost-button ${showBreadcrumb ? 'active-highlight' : ''}`} type="button" onClick={onToggleBreadcrumb}>
+          <GitBranch size={16} />
+          {showBreadcrumb ? 'Ocultar caminho' : 'Mostrar caminho'}
         </button>
         <button className={`ghost-button ${isFocusMode ? 'active-highlight' : ''}`} type="button" onClick={onToggleFocusMode}>
           {isFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}

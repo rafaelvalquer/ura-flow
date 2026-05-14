@@ -1,16 +1,21 @@
-export default function FlowBreadcrumb({ selection }) {
-  const parts = buildBreadcrumbParts(selection);
-
+export default function FlowBreadcrumb({ items = [] }) {
   return (
     <div className="flow-overlay flow-breadcrumb">
-      {parts.length === 0 ? (
+      {items.length === 0 ? (
         <span className="breadcrumb-empty">Nenhum item selecionado</span>
       ) : (
-        parts.map((part, index) => (
-          <span className="breadcrumb-part" key={`${part}-${index}`}>
+        items.map((item, index) => (
+          <button
+            className={`breadcrumb-part ${item.target ? 'is-clickable' : ''}`}
+            disabled={!item.target}
+            key={`${item.label}-${index}`}
+            onClick={() => item.onClick?.(item)}
+            title={item.target ? `Focar ${item.label}` : item.label}
+            type="button"
+          >
             {index > 0 && <b>&gt;</b>}
-            {part}
-          </span>
+            <span>{item.label}</span>
+          </button>
         ))
       )}
     </div>
@@ -18,29 +23,15 @@ export default function FlowBreadcrumb({ selection }) {
 }
 
 export function buildBreadcrumbText(selection) {
-  return buildBreadcrumbParts(selection).join(' > ');
-}
-
-function buildBreadcrumbParts(selection) {
-  if (!selection) return [];
-
-  const data = selection.data ?? {};
+  const data = selection?.data ?? {};
   const transitions = data.transitions ?? (data.transition ? [data.transition] : []);
   const transition = transitions[0];
+  if (!transition) return [selection?.label || data.label].filter(Boolean).join(' > ');
 
-  if (transition) {
-    const parts = [
-      transition.from,
-      ...(transition.conditions ?? []),
-      transition.to,
-    ].filter(Boolean);
-
-    if (transition.hasBiMarking || data.nodeType === 'biMarking') {
-      parts.push('Marcação URA');
-    }
-
-    return [...new Set(parts)];
+  const parts = [transition.from, ...(transition.conditions ?? []), transition.to].filter(Boolean);
+  if (transition.hasBiMarking || data.nodeType === 'biMarking') {
+    parts.push('Marcacao URA');
   }
 
-  return [selection.label || data.label].filter(Boolean);
+  return [...new Set(parts)].join(' > ');
 }

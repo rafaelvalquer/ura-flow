@@ -503,11 +503,42 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #111827;
+  cursor: default;
+  font: inherit;
+  padding: 3px 5px;
   white-space: nowrap;
 }
 
 .breadcrumb-part:not(:last-child) {
   color: #475569;
+}
+
+.breadcrumb-part span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-part.is-clickable {
+  cursor: pointer;
+}
+
+.breadcrumb-part.is-clickable:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.breadcrumb-part:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.16);
+  outline-offset: 2px;
+}
+
+.breadcrumb-part:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .breadcrumb-part b {
@@ -709,7 +740,8 @@ button:disabled {
 }
 
 .bi-node-badge,
-.bi-code {
+.bi-code,
+.navigate-node-badge {
   display: inline-flex;
   align-items: center;
   width: fit-content;
@@ -1044,6 +1076,22 @@ button:disabled {
   gap: 8px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.navigate-node-badge {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.state-node:has(.navigate-node-badge) {
+  cursor: zoom-in;
+}
+
+.state-node:has(.navigate-node-badge):hover {
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, 0.1),
+    0 10px 22px rgba(15, 23, 42, 0.14);
 }
 
 .occurrence-item p {

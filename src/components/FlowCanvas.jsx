@@ -34,8 +34,10 @@ export default function FlowCanvas({
   layoutVersion,
   focusRequest,
   selection,
+  showBreadcrumb = true,
   onSelectionChange,
   onNodePositionsChange,
+  onNavigateToState,
   canvasRef,
 }) {
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
@@ -81,11 +83,24 @@ export default function FlowCanvas({
   }, [canvasRef]);
 
   const memoNodeTypes = useMemo(() => nodeTypes, []);
+  const breadcrumbItems = useMemo(() => {
+    return buildBreadcrumbItems({
+      selection,
+      nodes: flowNodes,
+      onFocus: focusBreadcrumbTarget,
+    });
+  }, [selection, flowNodes]);
 
   function handleNodeClick(_, node) {
     setNodes(flowNodes.map((item) => ({ ...item, selected: item.id === node.id })));
     setEdges(applyNodeConnectionHighlight(flowEdges, node.id));
     onSelectionChange(selectionFromNode(node));
+  }
+
+  function handleNodeDoubleClick(_, node) {
+    const targetState = node.data?.navigateToState;
+    if (!node.data?.isNavigableDestination || !targetState) return;
+    onNavigateToState?.(targetState);
   }
 
   function handleEdgeClick(_, edge) {
@@ -98,6 +113,29 @@ export default function FlowCanvas({
     setNodes(flowNodes.map((node) => ({ ...node, selected: false })));
     setEdges(clearEdgeHighlight(flowEdges));
     onSelectionChange(null);
+  }
+
+  function focusBreadcrumbTarget(target) {
+    if (!target) return;
+
+    if (target.kind === 'edge') {
+      const edge = flowEdges.find((item) => item.id === target.id);
+      if (!edge) return;
+      const midpoint = getEdgeMidpoint(edge, flowNodes);
+      setCenter(midpoint.x, midpoint.y, { zoom: 1.1, duration: 450 });
+      setNodes(flowNodes.map((node) => ({ ...node, selected: false })));
+      setEdges(applySingleEdgeHighlight(flowEdges, edge.id));
+      onSelectionChange(selectionFromEdge(edge));
+      return;
+    }
+
+    const node = flowNodes.find((item) => item.id === target.id);
+    if (!node) return;
+    const center = getNodeCenter(node);
+    setCenter(center.x, center.y, { zoom: 1.1, duration: 450 });
+    setNodes(flowNodes.map((item) => ({ ...item, selected: item.id === node.id })));
+    setEdges(applyNodeConnectionHighlight(flowEdges, node.id));
+    onSelectionChange(selectionFromNode(node));
   }
 
   function handleNodesChange(changes) {
@@ -127,7 +165,7 @@ export default function FlowCanvas({
         <CanvasEmptyState />
       ) : (
         <>
-          <FlowBreadcrumb selection={selection} />
+          {showBreadcrumb && <FlowBreadcrumb items={breadcrumbItems} />}
           <FlowLegend />
           <ReactFlow
             nodes={flowNodes}
@@ -136,6 +174,7 @@ export default function FlowCanvas({
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
             onEdgeClick={handleEdgeClick}
             onNodeDragStop={handleNodeDragStop}
             onPaneClick={handlePaneClick}
@@ -281,10 +320,133 @@ function getEdgeMidpoint(edge, nodes) {
   };
 }
 
+function buildBreadcrumbItems({ selection, nodes, onFocus }) {
+  if (!selection) return [];
+
+  const data = selection.data ?? {};
+  const transitions = data.transitions ?? (data.transition ? [data.transition] : []);
+  const transition = transitions[0];
+
+  if (!transition) {
+    const target = selection.id ? { kind: selection.targetKind ?? 'node', id: selection.id } : null;
+    return [{
+      label: selection.label || data.label,
+      target,
+      onClick: () => onFocus(target),
+    }].filter((item) => item.label);
+  }
+
+  const items = [];
+  addBreadcrumbItem(items, {
+    label: transition.from,
+    target: findOriginNode(nodes, transition.from),
+    onFocus,
+  });
+
+  (transition.conditions ?? []).forEach((condition, index) => {
+    addBreadcrumbItem(items, {
+      label: condition,
+      target: findConditionNode(nodes, condition, transition, index),
+      onFocus,
+    });
+  });
+
+  addBreadcrumbItem(items, {
+    label: transition.to,
+    target: findDestinationNode(nodes, transition),
+    onFocus,
+  });
+
+  if (transition.hasBiMarking || data.nodeType === 'biMarking') {
+    addBreadcrumbItem(items, {
+      label: 'Marcacao URA',
+      target: findBiNode(nodes, transition),
+      onFocus,
+    });
+  }
+
+  return items;
+}
+
+function addBreadcrumbItem(items, { label, target, onFocus }) {
+  if (!label) return;
+  items.push({
+    label,
+    target,
+    onClick: () => onFocus(target),
+  });
+}
+
+function findOriginNode(nodes, stateName) {
+  const node = nodes.find((item) => (
+    item.data?.role === 'origin'
+    && (!stateName || item.data?.label === stateName || item.data?.sheetName === stateName)
+  )) ?? nodes.find((item) => item.data?.role === 'origin');
+  return node ? { kind: 'node', id: node.id } : null;
+}
+
+function findConditionNode(nodes, condition, transition, conditionIndex) {
+  const exact = nodes.find((node) => (
+    node.data?.nodeType === 'condition'
+    && (node.data?.condition === condition || node.data?.label === condition)
+    && matchesTransition(node, transition.id)
+  ));
+  if (exact) return { kind: 'node', id: exact.id };
+
+  const byPathPosition = nodes.filter((node) => (
+    node.data?.nodeType === 'condition'
+    && (node.data?.condition === condition || node.data?.label === condition)
+    && matchesSheet(node, transition.sheetName)
+  ))[conditionIndex];
+  if (byPathPosition) return { kind: 'node', id: byPathPosition.id };
+
+  const byLabel = nodes.find((node) => (
+    node.data?.nodeType === 'condition'
+    && (node.data?.condition === condition || node.data?.label === condition)
+  ));
+  return byLabel ? { kind: 'node', id: byLabel.id } : null;
+}
+
+function findDestinationNode(nodes, transition) {
+  const exact = nodes.find((node) => (
+    node.data?.role !== 'origin'
+    && node.data?.nodeType !== 'condition'
+    && node.data?.nodeType !== 'biMarking'
+    && (node.data?.label === transition.to || node.data?.transition?.to === transition.to)
+    && matchesTransition(node, transition.id)
+  ));
+  if (exact) return { kind: 'node', id: exact.id };
+
+  const grouped = nodes.find((node) => (
+    node.data?.role !== 'origin'
+    && node.data?.nodeType !== 'condition'
+    && node.data?.nodeType !== 'biMarking'
+    && node.data?.label === transition.to
+    && (node.data?.transitions ?? []).some((item) => item.id === transition.id)
+  ));
+  if (grouped) return { kind: 'node', id: grouped.id };
+
+  const byLabel = nodes.find((node) => (
+    node.data?.role !== 'origin'
+    && node.data?.nodeType !== 'condition'
+    && node.data?.nodeType !== 'biMarking'
+    && node.data?.label === transition.to
+  ));
+  return byLabel ? { kind: 'node', id: byLabel.id } : null;
+}
+
+function findBiNode(nodes, transition) {
+  const node = nodes.find((item) => (
+    item.data?.nodeType === 'biMarking'
+    && matchesTransition(item, transition.id)
+  ));
+  return node ? { kind: 'node', id: node.id } : null;
+}
+
 function selectionFromNode(node) {
-  return { kind: 'nó', label: node.data?.label, data: node.data };
+  return { id: node.id, targetKind: 'node', kind: 'nó', label: node.data?.label, data: node.data };
 }
 
 function selectionFromEdge(edge) {
-  return { kind: 'transição', label: edge.label, data: edge.data };
+  return { id: edge.id, targetKind: 'edge', kind: 'transição', label: edge.label, data: edge.data };
 }

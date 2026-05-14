@@ -34,6 +34,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [showChangeColors, setShowChangeColors] = useState(false);
+  const [showBreadcrumb, setShowBreadcrumb] = useState(true);
   const [focusRequest, setFocusRequest] = useState(null);
   const [isDetailsCollapsed, setDetailsCollapsed] = useState(false);
   const [isFocusMode, setFocusMode] = useState(false);
@@ -111,6 +112,7 @@ export default function App() {
       totalSheets: 0,
     });
     setShowChangeColors(false);
+    setShowBreadcrumb(true);
     setFocusMode(false);
   }
 
@@ -162,6 +164,13 @@ export default function App() {
     });
   }
 
+  function handleNavigateToState(stateName) {
+    if (!stateName || stateName === selectedState) return;
+    setSelectedState(stateName);
+    setSelection(null);
+    setFocusRequest(null);
+  }
+
   function handleOrganize() {
     setFocusRequest(null);
     saveNodePositions(positionStorageKey, rawGraph.nodes);
@@ -177,6 +186,7 @@ export default function App() {
     await exportFlowToPdf(canvasRef.current, {
       stateName: selectedState,
       viewMode,
+      nodes: graph.nodes,
     });
   }
 
@@ -189,8 +199,10 @@ export default function App() {
           selectedState={selectedState}
           viewMode={viewMode}
           showChangeColors={showChangeColors}
+          showBreadcrumb={showBreadcrumb}
           isFocusMode={isFocusMode}
           onToggleChangeColors={() => setShowChangeColors((value) => !value)}
+          onToggleBreadcrumb={() => setShowBreadcrumb((value) => !value)}
           onToggleFocusMode={() => setFocusMode((value) => !value)}
           onOrganize={handleOrganize}
           onExport={handleExport}
@@ -277,8 +289,10 @@ export default function App() {
             layoutVersion={layoutVersion}
             focusRequest={focusRequest}
             selection={selection}
+            showBreadcrumb={showBreadcrumb}
             onSelectionChange={setSelection}
             onNodePositionsChange={handleNodePositionsChange}
+            onNavigateToState={handleNavigateToState}
             canvasRef={canvasRef}
           />
 
