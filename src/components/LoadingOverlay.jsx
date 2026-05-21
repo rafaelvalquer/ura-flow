@@ -1,6 +1,7 @@
-import { FileSpreadsheet } from 'lucide-react';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import loadingAnimationUrl from '../assets/loading-files.lottie?url';
 
-export default function LoadingOverlay({ fileName, progress }) {
+export default function LoadingOverlay({ fileName, progress, title = 'Lendo arquivo Excel' }) {
   const percent = Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)));
   const stage = progress?.stage || 'Preparando leitura';
   const currentSheet = progress?.currentSheet ?? 0;
@@ -11,11 +12,14 @@ export default function LoadingOverlay({ fileName, progress }) {
   return (
     <div className="loading-overlay" role="status" aria-live="polite" aria-busy="true">
       <div className="loading-card">
-        <div className="loading-spinner" />
-        <div className="loading-icon">
-          <FileSpreadsheet size={22} />
-        </div>
-        <h2>Lendo arquivo Excel</h2>
+        <DotLottieReact
+          className="loading-lottie"
+          src={loadingAnimationUrl}
+          loop
+          autoplay
+          aria-hidden="true"
+        />
+        <h2>{title}</h2>
         <p>{stage}</p>
         <div className="loading-progress" aria-label={`Progresso ${percent}%`}>
           <div className="loading-progress-bar" style={{ width: `${percent}%` }} />

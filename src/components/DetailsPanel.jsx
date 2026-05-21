@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Gauge, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { getComparisonFieldLabel } from '../services/compareSpecs.js';
 
 export default function DetailsPanel({
@@ -6,6 +6,7 @@ export default function DetailsPanel({
   isCollapsed = false,
   onToggleCollapsed,
   onOpenOccurrence,
+  onAnalyzeExperience,
 }) {
   const data = selection?.data ?? {};
   const transitions = data.transitions ?? (data.transition ? [data.transition] : []);
@@ -14,6 +15,12 @@ export default function DetailsPanel({
     ? data.changeColors
     : [...new Set(transitions.map((transition) => transition.changeColor).filter(Boolean))];
   const comparisonChanges = data.comparisonChanges ?? [];
+  const uxNodeAnalysis = data.uxNodeAnalysis;
+  const analysisTarget = data.isNavigableDestination
+    ? data.navigateToState
+    : data.nodeType === 'state' || data.nodeType === 'uxState'
+      ? data.sheetName || selection?.label
+      : '';
 
   if (isCollapsed) {
     return (
@@ -65,6 +72,20 @@ export default function DetailsPanel({
           <Detail label="Marcacao de B.I." value={data.bi || firstTransition?.bi} />
           <Detail label="Aba" value={firstTransition?.sheetName} />
           <Detail label="Linha" value={firstTransition?.rowNumber} />
+
+          {analysisTarget && (
+            <button
+              type="button"
+              className="secondary-button detail-action-button"
+              onClick={() => onAnalyzeExperience?.(analysisTarget)}
+            >
+              <Gauge size={15} />
+              Analisar experiencia
+            </button>
+          )}
+
+          {uxNodeAnalysis && <UxNodeAnalysis analysis={uxNodeAnalysis} />}
+
           {changeColors.length > 0 && (
             <>
               <Detail label="Alteracao marcada" value="Sim" />
@@ -94,6 +115,42 @@ export default function DetailsPanel({
       )}
     </aside>
   );
+}
+
+function UxNodeAnalysis({ analysis }) {
+  return (
+    <div className="detail-block ux-node-analysis">
+      <span className="detail-label">{analysis.stateName}</span>
+      <div className={`ux-node-score ${scoreClass(analysis.score)}`}>
+        <span>Score do no</span>
+        <strong>{analysis.score}/100</strong>
+      </div>
+
+      <UxList title="Problemas" items={analysis.problems} emptyText="Nenhum problema relevante detectado." />
+      <UxList title="Sugestoes" items={analysis.suggestions} emptyText="Sem sugestoes adicionais." />
+    </div>
+  );
+}
+
+function UxList({ title, items = [], emptyText }) {
+  return (
+    <div className="ux-detail-list">
+      <strong>{title}</strong>
+      {items.length ? (
+        <ul>
+          {items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}
+        </ul>
+      ) : (
+        <p>{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function scoreClass(score) {
+  if (score >= 85) return 'good';
+  if (score >= 65) return 'attention';
+  return 'critical';
 }
 
 function ComparisonChanges({ changes }) {

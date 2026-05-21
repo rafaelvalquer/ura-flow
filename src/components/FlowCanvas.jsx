@@ -43,7 +43,7 @@ export default function FlowCanvas({
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
   const wrapperRef = useRef(null);
-  const { fitView, setCenter } = useReactFlow();
+  const { fitView, setCenter, setViewport } = useReactFlow();
 
   useEffect(() => {
     setNodes(nodes.map((node) => ({ ...node, selected: false })));
@@ -57,6 +57,11 @@ export default function FlowCanvas({
     if (!focusRequest || nodes.length === 0) return;
 
     window.requestAnimationFrame(() => {
+      if (focusRequest.kind === 'ux-analysis') {
+        setViewport(getTopLeftViewport(nodes), { duration: 350 });
+        return;
+      }
+
       const target = findFocusTarget(nodes, edges, focusRequest);
       if (!target) return;
 
@@ -76,7 +81,7 @@ export default function FlowCanvas({
       setCenter(midpoint.x, midpoint.y, { zoom: 1.1, duration: 500 });
       onSelectionChange?.(selectionFromEdge(target.item));
     });
-  }, [focusRequest, nodes, edges, setNodes, setEdges, setCenter, onSelectionChange]);
+  }, [focusRequest, nodes, edges, setNodes, setEdges, setCenter, setViewport, onSelectionChange]);
 
   useEffect(() => {
     if (canvasRef) canvasRef.current = wrapperRef.current;
@@ -317,6 +322,20 @@ function getEdgeMidpoint(edge, nodes) {
   return {
     x: (sourceCenter.x + targetCenter.x) / 2,
     y: (sourceCenter.y + targetCenter.y) / 2,
+  };
+}
+
+function getTopLeftViewport(nodes) {
+  const topLevelNodes = nodes.filter((node) => !node.parentId);
+  const targetNodes = topLevelNodes.length ? topLevelNodes : nodes;
+  const minX = Math.min(...targetNodes.map((node) => node.position?.x ?? 0));
+  const minY = Math.min(...targetNodes.map((node) => node.position?.y ?? 0));
+  const zoom = 0.86;
+
+  return {
+    x: 56 - minX * zoom,
+    y: 56 - minY * zoom,
+    zoom,
   };
 }
 

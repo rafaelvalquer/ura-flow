@@ -28,7 +28,7 @@ export default function Toolbar({
       <div className="toolbar-context">
         {selectedState && (
           <span className="selected-pill">
-            {selectedState} - {viewMode === 'detailedView' ? 'Visao detalhada' : 'Visao por estado'}
+            {selectedState} - {formatViewMode(viewMode)}
           </span>
         )}
         <button
@@ -74,4 +74,10 @@ export default function Toolbar({
       </div>
     </header>
   );
+}
+
+function formatViewMode(viewMode) {
+  if (viewMode === 'detailedView') return 'Visao detalhada';
+  if (viewMode === 'uxAnalysisView') return 'Experiencia UX';
+  return 'Visao por estado';
 }

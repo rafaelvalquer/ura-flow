@@ -7,10 +7,13 @@ import DetailsPanel from "./components/DetailsPanel";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import GlobalSearchPanel from "./components/GlobalSearchPanel";
 import ComparisonPanel from "./components/ComparisonPanel";
+import UxReportPanel from "./components/UxReportPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import Toolbar from "./components/Toolbar";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
+import { buildUxAnalysis } from "./services/uxAnalyzer.js";
+import { buildUxFlow } from "./services/uxFlowBuilder.js";
 import { compareSpecs } from "./services/compareSpecs.js";
 import { exportFlowToPng } from "./services/imageExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
@@ -23,6 +26,10 @@ export default function App() {
   const [comparisonSearch, setComparisonSearch] = useState("");
   const [comparisonFilter, setComparisonFilter] = useState("all");
   const [selectedState, setSelectedState] = useState("");
+  const [uxTargetState, setUxTargetState] = useState("");
+  const [uxAnalysisResult, setUxAnalysisResult] = useState(null);
+  const [uxGraphResult, setUxGraphResult] = useState({ nodes: [], edges: [] });
+  const [loadingTitle, setLoadingTitle] = useState("Lendo arquivo Excel");
   const [viewMode, setViewMode] = useState("stateView");
   const [search, setSearch] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
@@ -51,6 +58,7 @@ export default function App() {
     upload: true,
     states: true,
     diagnostics: true,
+    ux: true,
   });
   const canvasRef = useRef(null);
 
@@ -65,16 +73,25 @@ export default function App() {
   );
 
   const rawGraph = useMemo(
-    () => buildFlow(parsedData, selectedState, viewMode, {
-      showChangeColors,
-      showBiMarkings,
-      comparisonChanges: appMode === "comparison" ? comparisonChangesByTransitionId : {},
-    }),
-    [parsedData, selectedState, viewMode, showChangeColors, showBiMarkings, appMode, comparisonChangesByTransitionId],
+    () => {
+      if (viewMode === "uxAnalysisView") {
+        return uxGraphResult;
+      }
+
+      return buildFlow(parsedData, selectedState, viewMode, {
+        showChangeColors,
+        showBiMarkings,
+        comparisonChanges: appMode === "comparison" ? comparisonChangesByTransitionId : {},
+      });
+    },
+    [parsedData, selectedState, viewMode, showChangeColors, showBiMarkings, appMode, comparisonChangesByTransitionId, uxGraphResult],
   );
 
   const positionStorageKey = useMemo(
-    () => makePositionStorageKey(parsedData?.fileName, selectedState, viewMode, rawGraph.nodes),
+    () => {
+      if (viewMode === "uxAnalysisView") return "";
+      return makePositionStorageKey(parsedData?.fileName, selectedState, viewMode, rawGraph.nodes);
+    },
     [parsedData?.fileName, selectedState, viewMode, rawGraph.nodes],
   );
 
@@ -87,6 +104,7 @@ export default function App() {
 
   async function handleFileSelected(file) {
     setLoading(true);
+    setLoadingTitle("Lendo arquivo Excel");
     setLoadingFileName(file.name);
     setLoadingProgress({
       percent: 0,
@@ -103,6 +121,7 @@ export default function App() {
       setAppMode("analysis");
       setParsedData(result);
       setSelectedState(result.states[0]?.sheetName ?? "");
+      clearUxAnalysis();
       setSearch("");
       setGlobalSearch("");
       setFilter("all");
@@ -111,6 +130,7 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingFileName("");
+      setLoadingTitle("Lendo arquivo Excel");
       setLoadingProgress({
         percent: 0,
         stage: "",
@@ -124,6 +144,7 @@ export default function App() {
   async function handleComparisonFileSelected(slot, file) {
     setAppMode("comparison");
     setLoading(true);
+    setLoadingTitle("Lendo arquivo Excel");
     setLoadingFileName(file.name);
     setLoadingProgress({
       percent: 0,
@@ -144,6 +165,7 @@ export default function App() {
         setComparisonNextData(result);
         setParsedData(result);
         setSelectedState(result.states[0]?.sheetName ?? "");
+        clearUxAnalysis();
         setSearch("");
         setGlobalSearch("");
         setFilter("all");
@@ -153,6 +175,7 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingFileName("");
+      setLoadingTitle("Lendo arquivo Excel");
       setLoadingProgress({
         percent: 0,
         stage: "",
@@ -163,6 +186,12 @@ export default function App() {
     }
   }
 
+  function clearUxAnalysis() {
+    setUxTargetState("");
+    setUxAnalysisResult(null);
+    setUxGraphResult({ nodes: [], edges: [] });
+  }
+
   function handleClear() {
     setParsedData(null);
     setComparisonPreviousData(null);
@@ -171,6 +200,7 @@ export default function App() {
     setComparisonFilter("all");
     setAppMode("analysis");
     setSelectedState("");
+    clearUxAnalysis();
     setSelection(null);
     setFocusRequest(null);
     setSearch("");
@@ -179,6 +209,7 @@ export default function App() {
     setDiagnosticsScope("state");
     setError("");
     setLoadingFileName("");
+    setLoadingTitle("Lendo arquivo Excel");
     setLoadingProgress({
       percent: 0,
       stage: "",
@@ -194,6 +225,7 @@ export default function App() {
       upload: true,
       states: true,
       diagnostics: true,
+      ux: true,
     });
   }
 
@@ -204,9 +236,71 @@ export default function App() {
     }));
   }
 
-  function handleViewModeChange(nextMode) {
-    setViewMode(nextMode);
+  async function runUxAnalysis(stateName) {
+    if (!parsedData || !stateName) return;
+
+    setLoading(true);
+    setLoadingTitle("Analisando experiencia");
+    setLoadingFileName(parsedData.fileName || stateName);
+    setLoadingProgress(makeUxLoadingProgress(5, "Preparando analise", stateName));
+    setError("");
+    setSelection(null);
     setFocusRequest(null);
+    setUxTargetState(stateName);
+    setUxAnalysisResult(null);
+    setUxGraphResult({ nodes: [], edges: [] });
+    setSelectedState(stateName);
+    setViewMode("uxAnalysisView");
+
+    try {
+      await waitForLoadingAnimation();
+      setLoadingProgress(makeUxLoadingProgress(25, "Mapeando estados que chegam ao node", stateName));
+      await waitForPaint();
+
+      const analysis = buildUxAnalysis(parsedData, stateName);
+
+      setLoadingProgress(makeUxLoadingProgress(62, "Calculando scores, problemas e sugestoes", stateName));
+      await waitForPaint();
+
+      const uxGraph = buildUxFlow(parsedData, analysis);
+
+      setLoadingProgress(makeUxLoadingProgress(88, "Montando arvore visual da experiencia", stateName));
+      await waitForPaint();
+
+      setUxAnalysisResult(analysis);
+      setUxGraphResult(uxGraph);
+      setDiagnosticsScope("document");
+      setLayoutVersion((version) => version + 1);
+      setFocusRequest({
+        kind: "ux-analysis",
+        sheetName: stateName,
+        nonce: Date.now(),
+      });
+    } catch (caught) {
+      setError(caught?.message ?? "Nao foi possivel montar a analise de experiencia.");
+      setViewMode("stateView");
+      clearUxAnalysis();
+    } finally {
+      setLoading(false);
+      setLoadingFileName("");
+      setLoadingTitle("Lendo arquivo Excel");
+      setLoadingProgress({
+        percent: 0,
+        stage: "",
+        sheetName: "",
+        currentSheet: 0,
+        totalSheets: 0,
+      });
+    }
+  }
+
+  function handleViewModeChange(nextMode) {
+    if (nextMode === "uxAnalysisView") {
+      runUxAnalysis(selectedState);
+      return;
+    }
+    setFocusRequest(null);
+    setViewMode(nextMode);
   }
 
   function handleAppModeChange(nextMode) {
@@ -237,6 +331,7 @@ export default function App() {
 
   function handleGlobalResultSelect(item) {
     setSelectedState(item.sheetName);
+    clearUxAnalysis();
     setSelection(null);
 
     if (item.type === "state") {
@@ -291,6 +386,7 @@ export default function App() {
 
   function handleOpenOccurrence(transition) {
     setSelectedState(transition.sheetName);
+    clearUxAnalysis();
     setViewMode("detailedView");
     setSelection(null);
     setFocusRequest({
@@ -305,8 +401,15 @@ export default function App() {
   function handleNavigateToState(stateName) {
     if (!stateName || stateName === selectedState) return;
     setSelectedState(stateName);
+    clearUxAnalysis();
+    if (viewMode === "uxAnalysisView") setViewMode("stateView");
     setSelection(null);
     setFocusRequest(null);
+  }
+
+  function handleAnalyzeExperience(stateName) {
+    if (!stateName) return;
+    runUxAnalysis(stateName);
   }
 
   function handleOrganize() {
@@ -330,7 +433,7 @@ export default function App() {
   return (
     <ReactFlowProvider>
       <div className="app-shell">
-        {isLoading && <LoadingOverlay fileName={loadingFileName} progress={loadingProgress} />}
+        {isLoading && <LoadingOverlay fileName={loadingFileName} progress={loadingProgress} title={loadingTitle} />}
         <Toolbar
           fileName={parsedData?.fileName}
           selectedState={selectedState}
@@ -422,6 +525,8 @@ export default function App() {
                     selectedState={selectedState}
                     onSelectState={(state) => {
                       setSelectedState(state);
+                      clearUxAnalysis();
+                      if (viewMode === "uxAnalysisView") setViewMode("stateView");
                       setSelection(null);
                       setFocusRequest(null);
                     }}
@@ -443,6 +548,14 @@ export default function App() {
                       onWarningClick={handleWarningClick}
                       isOpen={sidebarAccordions.diagnostics}
                       onToggle={() => toggleSidebarAccordion("diagnostics")}
+                    />
+                  )}
+                  {appMode === "analysis" && viewMode === "uxAnalysisView" && uxAnalysisResult && (
+                    <UxReportPanel
+                      analysis={uxAnalysisResult}
+                      isOpen={sidebarAccordions.ux}
+                      onToggle={() => toggleSidebarAccordion("ux")}
+                      onWarningClick={handleWarningClick}
                     />
                   )}
                 </>
@@ -469,6 +582,7 @@ export default function App() {
               isCollapsed={isDetailsCollapsed}
               onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
               onOpenOccurrence={handleOpenOccurrence}
+              onAnalyzeExperience={handleAnalyzeExperience}
             />
           )}
         </div>
@@ -494,8 +608,43 @@ function ViewModeButtons({ viewMode, onChange }) {
       >
         Detalhada
       </button>
+      <button
+        type="button"
+        className={viewMode === "uxAnalysisView" ? "active" : ""}
+        onClick={() => onChange("uxAnalysisView")}
+      >
+        Experiencia UX
+      </button>
     </>
   );
+}
+
+function makeUxLoadingProgress(percent, stage, sheetName) {
+  return {
+    percent,
+    stage,
+    sheetName,
+    currentSheet: 0,
+    totalSheets: 0,
+  };
+}
+
+function waitForPaint() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0);
+    });
+  });
+}
+
+function waitForLoadingAnimation() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        window.setTimeout(resolve, 120);
+      });
+    });
+  });
 }
 
 function buildGlobalIndex(parsedData) {

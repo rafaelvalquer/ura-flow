@@ -65,26 +65,10 @@ button:disabled {
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
-.loading-spinner {
-  width: 54px;
-  height: 54px;
-  border: 4px solid #dbeafe;
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 0.85s linear infinite;
-}
-
-.loading-icon {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: -34px;
-  color: #1d4ed8;
-  background: #ffffff;
-  border: 1px solid #dbeafe;
-  border-radius: 999px;
+.loading-lottie {
+  width: 150px;
+  height: 150px;
+  display: block;
 }
 
 .loading-card h2 {
@@ -149,12 +133,6 @@ button:disabled {
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .app-toolbar {
@@ -914,6 +892,32 @@ button:disabled {
     0 10px 22px rgba(15, 23, 42, 0.14);
 }
 
+.custom-node.ux-analyzed-node {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+    0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.custom-node.ux-target-node {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  box-shadow:
+    0 0 0 4px rgba(20, 184, 166, 0.16),
+    0 14px 26px rgba(15, 23, 42, 0.16);
+}
+
+.custom-node.ux-score-good {
+  border-color: #10b981;
+}
+
+.custom-node.ux-score-attention {
+  border-color: #f59e0b;
+}
+
+.custom-node.ux-score-critical {
+  border-color: #ef4444;
+}
+
 .edge-empty-prompt path {
   stroke: #dc2626;
   stroke-width: 2.6;
@@ -944,6 +948,31 @@ button:disabled {
 .edge-comparison-change .react-flow__edge-text {
   fill: #5b21b6;
   font-weight: 900;
+}
+
+.edge-ux-risk-high path {
+  stroke: #dc2626;
+  stroke-width: 3;
+}
+
+.edge-ux-risk-medium path {
+  stroke: #d97706;
+  stroke-width: 2.8;
+}
+
+.edge-ux-path path,
+.edge-ux-inside path {
+  stroke: #2563eb;
+}
+
+.edge-ux-risk-high .react-flow__edge-textbg {
+  fill: #fef2f2;
+  stroke: #fca5a5;
+}
+
+.edge-ux-risk-medium .react-flow__edge-textbg {
+  fill: #fffbeb;
+  stroke: #fcd34d;
 }
 
 .edge-connected path {
@@ -1450,6 +1479,150 @@ button:disabled {
   padding: 6px 9px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.detail-action-button {
+  width: 100%;
+}
+
+.ux-node-analysis {
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.ux-node-score,
+.ux-score-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.ux-node-score span,
+.ux-score-card span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ux-node-score strong,
+.ux-score-card strong {
+  color: #111827;
+  font-size: 22px;
+}
+
+.ux-score-card em {
+  grid-column: 1 / -1;
+  color: #475569;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.ux-node-score.good,
+.ux-score-card.good {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.ux-node-score.attention,
+.ux-score-card.attention {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.ux-node-score.critical,
+.ux-score-card.critical {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.ux-detail-list,
+.ux-report-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ux-detail-list strong {
+  color: #111827;
+  font-size: 12px;
+}
+
+.ux-detail-list ul,
+.ux-report-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ux-detail-list p,
+.ux-report-section p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ux-report-panel {
+  border-color: #bae6fd;
+}
+
+.ux-summary-grid {
+  margin: 10px 0 12px;
+}
+
+.ux-report-section {
+  margin-top: 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.ux-report-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #111827;
+  font-size: 12px;
+}
+
+.ux-report-section h3 span {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.ux-report-section.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.ux-report-section.suggestion {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.ux-report-section small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ux-warning-list {
+  max-height: 180px;
 }
 
 .stat-card {

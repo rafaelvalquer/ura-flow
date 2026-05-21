@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.19.4",
     "@xyflow/react": "^12.8.4",
     "html-to-image": "1.11.11",
     "lucide-react": "^0.468.0",
