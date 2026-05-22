@@ -9,6 +9,7 @@ import GlobalSearchPanel from "./components/GlobalSearchPanel";
 import ComparisonPanel from "./components/ComparisonPanel";
 import UxReportPanel from "./components/UxReportPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
+import NiceScriptWorkspace from "./components/NiceScriptWorkspace";
 import Toolbar from "./components/Toolbar";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
@@ -19,6 +20,7 @@ import { exportFlowToPng } from "./services/imageExporter.js";
 import { normalizeKey } from "./utils/normalizeText.js";
 
 export default function App() {
+  const [workspaceMode, setWorkspaceMode] = useState("spec");
   const [parsedData, setParsedData] = useState(null);
   const [appMode, setAppMode] = useState("analysis");
   const [comparisonPreviousData, setComparisonPreviousData] = useState(null);
@@ -434,160 +436,189 @@ export default function App() {
     <ReactFlowProvider>
       <div className="app-shell">
         {isLoading && <LoadingOverlay fileName={loadingFileName} progress={loadingProgress} title={loadingTitle} />}
-        <Toolbar
-          fileName={parsedData?.fileName}
-          selectedState={selectedState}
-          viewMode={viewMode}
-          showChangeColors={showChangeColors}
-          showBiMarkings={showBiMarkings}
-          showBreadcrumb={showBreadcrumb}
-          isFocusMode={isFocusMode}
-          onToggleChangeColors={() => setShowChangeColors((value) => !value)}
-          onToggleBiMarkings={() => setShowBiMarkings((value) => !value)}
-          onToggleBreadcrumb={() => setShowBreadcrumb((value) => !value)}
-          onToggleFocusMode={() => setFocusMode((value) => !value)}
-          onOrganize={handleOrganize}
-          onExportImage={handleExportImage}
-          onClear={handleClear}
-          canExport={graph.nodes.length > 0}
-          canOrganize={graph.nodes.length > 0}
-          canHighlightChanges={graph.nodes.length > 0}
-        />
+        <WorkspaceModeSwitch workspaceMode={workspaceMode} onChange={setWorkspaceMode} />
 
-        <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
-          {!isFocusMode && (
-            <aside className="left-sidebar">
-              <section className="panel-section mode-panel">
-                <div className="section-header">
-                  <h2>Modo</h2>
-                </div>
-                <div className="segmented-control">
-                  <button
-                    type="button"
-                    className={appMode === "analysis" ? "active" : ""}
-                    onClick={() => handleAppModeChange("analysis")}
-                  >
-                    Analise
-                  </button>
-                  <button
-                    type="button"
-                    className={appMode === "comparison" ? "active" : ""}
-                    onClick={() => handleAppModeChange("comparison")}
-                  >
-                    Comparacao
-                  </button>
-                </div>
-              </section>
-              {appMode === "analysis" ? (
-                <UploadPanel
-                  onFileSelected={handleFileSelected}
-                  isLoading={isLoading}
-                  isOpen={sidebarAccordions.upload}
-                  onToggle={() => toggleSidebarAccordion("upload")}
-                />
-              ) : (
-                <ComparisonPanel
-                  previousData={comparisonPreviousData}
-                  nextData={comparisonNextData}
-                  comparison={comparison}
-                  search={comparisonSearch}
-                  filter={comparisonFilter}
-                  isLoading={isLoading}
-                  onSearchChange={setComparisonSearch}
-                  onFilterChange={setComparisonFilter}
-                  onUploadPrevious={(file) => handleComparisonFileSelected("previous", file)}
-                  onUploadNext={(file) => handleComparisonFileSelected("next", file)}
-                  onSelectChange={handleComparisonChangeSelect}
-                />
-              )}
-              {error && <div className="error-banner">{error}</div>}
-              <section className="panel-section view-panel">
-                <div className="section-header">
-                  <h2>Visao</h2>
-                </div>
-                <div className="segmented-control">
-                  <ViewModeButtons viewMode={viewMode} onChange={handleViewModeChange} />
-                </div>
-              </section>
-              {parsedData && (
-                <>
-                  {appMode === "analysis" && (
-                    <GlobalSearchPanel
-                      items={globalIndex}
-                      search={globalSearch}
-                      onSearchChange={setGlobalSearch}
-                      onSelect={handleGlobalResultSelect}
-                    />
-                  )}
-                  <StateList
-                    states={parsedData.states}
-                    sheetNames={parsedData.sheetNames}
-                    selectedState={selectedState}
-                    onSelectState={(state) => {
-                      setSelectedState(state);
-                      clearUxAnalysis();
-                      if (viewMode === "uxAnalysisView") setViewMode("stateView");
-                      setSelection(null);
-                      setFocusRequest(null);
-                    }}
-                    search={search}
-                    onSearchChange={setSearch}
-                    filter={filter}
-                    onFilterChange={setFilter}
-                    isOpen={sidebarAccordions.states}
-                    onToggle={() => toggleSidebarAccordion("states")}
-                  />
-                  {appMode === "analysis" && (
-                    <DiagnosticsPanel
-                      diagnostics={parsedData.diagnostics}
-                      states={parsedData.states}
-                      sheetNames={parsedData.sheetNames}
-                      selectedState={selectedState}
-                      scope={diagnosticsScope}
-                      onScopeChange={setDiagnosticsScope}
-                      onWarningClick={handleWarningClick}
-                      isOpen={sidebarAccordions.diagnostics}
-                      onToggle={() => toggleSidebarAccordion("diagnostics")}
-                    />
-                  )}
-                  {appMode === "analysis" && viewMode === "uxAnalysisView" && uxAnalysisResult && (
-                    <UxReportPanel
-                      analysis={uxAnalysisResult}
-                      isOpen={sidebarAccordions.ux}
-                      onToggle={() => toggleSidebarAccordion("ux")}
-                      onWarningClick={handleWarningClick}
-                    />
-                  )}
-                </>
-              )}
-            </aside>
-          )}
-
-          <FlowCanvas
-            nodes={graph.nodes}
-            edges={graph.edges}
-            layoutVersion={layoutVersion}
-            focusRequest={focusRequest}
-            selection={selection}
-            showBreadcrumb={showBreadcrumb}
-            onSelectionChange={setSelection}
-            onNodePositionsChange={handleNodePositionsChange}
-            onNavigateToState={handleNavigateToState}
-            canvasRef={canvasRef}
-          />
-
-          {!isFocusMode && (
-            <DetailsPanel
-              selection={selection}
-              isCollapsed={isDetailsCollapsed}
-              onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
-              onOpenOccurrence={handleOpenOccurrence}
-              onAnalyzeExperience={handleAnalyzeExperience}
+        {workspaceMode === "nice" ? (
+          <NiceScriptWorkspace />
+        ) : (
+          <>
+            <Toolbar
+              fileName={parsedData?.fileName}
+              selectedState={selectedState}
+              viewMode={viewMode}
+              showChangeColors={showChangeColors}
+              showBiMarkings={showBiMarkings}
+              showBreadcrumb={showBreadcrumb}
+              isFocusMode={isFocusMode}
+              onToggleChangeColors={() => setShowChangeColors((value) => !value)}
+              onToggleBiMarkings={() => setShowBiMarkings((value) => !value)}
+              onToggleBreadcrumb={() => setShowBreadcrumb((value) => !value)}
+              onToggleFocusMode={() => setFocusMode((value) => !value)}
+              onOrganize={handleOrganize}
+              onExportImage={handleExportImage}
+              onClear={handleClear}
+              canExport={graph.nodes.length > 0}
+              canOrganize={graph.nodes.length > 0}
+              canHighlightChanges={graph.nodes.length > 0}
             />
-          )}
-        </div>
+
+            <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
+              {!isFocusMode && (
+                <aside className="left-sidebar">
+                  <section className="panel-section mode-panel">
+                    <div className="section-header">
+                      <h2>Modo</h2>
+                    </div>
+                    <div className="segmented-control">
+                      <button
+                        type="button"
+                        className={appMode === "analysis" ? "active" : ""}
+                        onClick={() => handleAppModeChange("analysis")}
+                      >
+                        Analise
+                      </button>
+                      <button
+                        type="button"
+                        className={appMode === "comparison" ? "active" : ""}
+                        onClick={() => handleAppModeChange("comparison")}
+                      >
+                        Comparacao
+                      </button>
+                    </div>
+                  </section>
+                  {appMode === "analysis" ? (
+                    <UploadPanel
+                      onFileSelected={handleFileSelected}
+                      isLoading={isLoading}
+                      isOpen={sidebarAccordions.upload}
+                      onToggle={() => toggleSidebarAccordion("upload")}
+                    />
+                  ) : (
+                    <ComparisonPanel
+                      previousData={comparisonPreviousData}
+                      nextData={comparisonNextData}
+                      comparison={comparison}
+                      search={comparisonSearch}
+                      filter={comparisonFilter}
+                      isLoading={isLoading}
+                      onSearchChange={setComparisonSearch}
+                      onFilterChange={setComparisonFilter}
+                      onUploadPrevious={(file) => handleComparisonFileSelected("previous", file)}
+                      onUploadNext={(file) => handleComparisonFileSelected("next", file)}
+                      onSelectChange={handleComparisonChangeSelect}
+                    />
+                  )}
+                  {error && <div className="error-banner">{error}</div>}
+                  <section className="panel-section view-panel">
+                    <div className="section-header">
+                      <h2>Visao</h2>
+                    </div>
+                    <div className="segmented-control">
+                      <ViewModeButtons viewMode={viewMode} onChange={handleViewModeChange} />
+                    </div>
+                  </section>
+                  {parsedData && (
+                    <>
+                      {appMode === "analysis" && (
+                        <GlobalSearchPanel
+                          items={globalIndex}
+                          search={globalSearch}
+                          onSearchChange={setGlobalSearch}
+                          onSelect={handleGlobalResultSelect}
+                        />
+                      )}
+                      <StateList
+                        states={parsedData.states}
+                        sheetNames={parsedData.sheetNames}
+                        selectedState={selectedState}
+                        onSelectState={(state) => {
+                          setSelectedState(state);
+                          clearUxAnalysis();
+                          if (viewMode === "uxAnalysisView") setViewMode("stateView");
+                          setSelection(null);
+                          setFocusRequest(null);
+                        }}
+                        search={search}
+                        onSearchChange={setSearch}
+                        filter={filter}
+                        onFilterChange={setFilter}
+                        isOpen={sidebarAccordions.states}
+                        onToggle={() => toggleSidebarAccordion("states")}
+                      />
+                      {appMode === "analysis" && (
+                        <DiagnosticsPanel
+                          diagnostics={parsedData.diagnostics}
+                          states={parsedData.states}
+                          sheetNames={parsedData.sheetNames}
+                          selectedState={selectedState}
+                          scope={diagnosticsScope}
+                          onScopeChange={setDiagnosticsScope}
+                          onWarningClick={handleWarningClick}
+                          isOpen={sidebarAccordions.diagnostics}
+                          onToggle={() => toggleSidebarAccordion("diagnostics")}
+                        />
+                      )}
+                      {appMode === "analysis" && viewMode === "uxAnalysisView" && uxAnalysisResult && (
+                        <UxReportPanel
+                          analysis={uxAnalysisResult}
+                          isOpen={sidebarAccordions.ux}
+                          onToggle={() => toggleSidebarAccordion("ux")}
+                          onWarningClick={handleWarningClick}
+                        />
+                      )}
+                    </>
+                  )}
+                </aside>
+              )}
+
+              <FlowCanvas
+                nodes={graph.nodes}
+                edges={graph.edges}
+                layoutVersion={layoutVersion}
+                focusRequest={focusRequest}
+                selection={selection}
+                showBreadcrumb={showBreadcrumb}
+                onSelectionChange={setSelection}
+                onNodePositionsChange={handleNodePositionsChange}
+                onNavigateToState={handleNavigateToState}
+                canvasRef={canvasRef}
+              />
+
+              {!isFocusMode && (
+                <DetailsPanel
+                  selection={selection}
+                  isCollapsed={isDetailsCollapsed}
+                  onToggleCollapsed={() => setDetailsCollapsed((value) => !value)}
+                  onOpenOccurrence={handleOpenOccurrence}
+                  onAnalyzeExperience={handleAnalyzeExperience}
+                />
+              )}
+            </div>
+          </>
+        )}
       </div>
     </ReactFlowProvider>
+  );
+}
+
+function WorkspaceModeSwitch({ workspaceMode, onChange }) {
+  return (
+    <div className="workspace-mode-switch">
+      <button
+        type="button"
+        className={workspaceMode === "spec" ? "active" : ""}
+        onClick={() => onChange("spec")}
+      >
+        Spec Excel
+      </button>
+      <button
+        type="button"
+        className={workspaceMode === "nice" ? "active" : ""}
+        onClick={() => onChange("nice")}
+      >
+        Script NICE
+      </button>
+    </div>
   );
 }
 
