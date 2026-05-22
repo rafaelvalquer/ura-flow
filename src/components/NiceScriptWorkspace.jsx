@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Copy, FileCode2, FileInput, LayoutGrid, Menu, Milestone, Plus, Save, Trash2 } from 'lucide-react';
 import NiceScriptCanvas, { makeNiceEdgeId } from './NiceScriptCanvas.jsx';
+import NiceSnippetCodeMirror from './NiceSnippetCodeMirror.jsx';
 import { cloneNiceScript, getNextActionId, makeBranch, makeNiceAction, NICE_ACTION_LABELS } from '../services/niceScriptModel.js';
 import { exportNiceClipboard } from '../services/niceClipboardExporter.js';
 import {
@@ -19,7 +20,8 @@ import { organizeNiceScript } from '../services/niceLayout.js';
 
 const DRAFT_STORAGE_KEY = 'ura-flow:nice-script:draft';
 const CLONES_STORAGE_KEY = 'ura-flow:nice-script:clones';
-const MANUAL_ACTION_TYPES = ['SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
+const SNIPPET_THEME_STORAGE_KEY = 'ura-flow:nice-script:snippet-theme';
+const MANUAL_ACTION_TYPES = ['BEGIN', 'SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
 const SNIPPET_VARIABLES = ['NEXT_STEP', 'AUDIO', 'MRES', 'OP_ESCOLHIDA', 'scriptpoint', 'MAPA_DNA', '{pathStep}', '{pathAPI}', '{path_audio}'];
 const SNIPPET_BLOCKS = [
   {
@@ -93,6 +95,8 @@ export default function NiceScriptWorkspace() {
   const [importError, setImportError] = useState('');
   const [isMenuWizardOpen, setMenuWizardOpen] = useState(false);
   const [isApiWizardOpen, setApiWizardOpen] = useState(false);
+  const [pendingTemplateInsert, setPendingTemplateInsert] = useState(null);
+  const [templateInsertMode, setTemplateInsertMode] = useState('replace');
   const [manualActionType, setManualActionType] = useState('SNIPPET');
   const [pendingConnection, setPendingConnection] = useState(null);
   const [snippetStudioActionId, setSnippetStudioActionId] = useState(null);
@@ -123,13 +127,55 @@ export default function NiceScriptWorkspace() {
     setImportError('');
   }
 
+  function requestTemplateInsert(templateRequest) {
+    if (script.actions.length > 0) {
+      setPendingTemplateInsert(templateRequest);
+      return;
+    }
+
+    executeTemplateInsert(templateRequest, 'replace');
+  }
+
+  function executeTemplateInsert(templateRequest, mode) {
+    setPendingTemplateInsert(null);
+    setTemplateInsertMode(mode);
+
+    if (templateRequest.kind === 'menu') {
+      setMenuWizardOpen(true);
+      return;
+    }
+
+    if (templateRequest.kind === 'api') {
+      setApiWizardOpen(true);
+      return;
+    }
+
+    const nextScript = templateRequest.getScript();
+    if (mode === 'append') {
+      appendTemplateScript(nextScript, { label: templateRequest.label });
+      return;
+    }
+
+    loadScript(nextScript);
+  }
+
   function handleCreateMenuFromWizard(nextScript) {
     setMenuWizardOpen(false);
+    if (templateInsertMode === 'append') {
+      appendTemplateScript(nextScript, { label: 'Menu padrao NICE' });
+      setTemplateInsertMode('replace');
+      return;
+    }
     loadScript(nextScript);
   }
 
   function handleCreateApiFromWizard(nextScript) {
     setApiWizardOpen(false);
+    if (templateInsertMode === 'append') {
+      appendTemplateScript(nextScript, { label: 'Chamada API / RUNSUB' });
+      setTemplateInsertMode('replace');
+      return;
+    }
     loadScript(nextScript);
   }
 
@@ -158,6 +204,40 @@ export default function NiceScriptWorkspace() {
 
   function handleDeleteClone(id) {
     setClonedTemplates((current) => current.filter((item) => item.id !== id));
+  }
+
+  function appendTemplateScript(templateScript, options = {}) {
+    setScript((current) => {
+      const remapped = remapTemplateActionsForAppend(current.actions, templateScript.actions);
+      if (remapped.actions.length === 0) {
+        setCopyStatus('Template nao possui actions para adicionar.');
+        return current;
+      }
+
+      const appendedTemplates = [
+        ...(current.metadata?.appendedTemplates ?? []),
+        {
+          name: options.label || templateScript.name || 'Template NICE',
+          templateType: templateScript.templateType || '',
+          addedAt: new Date().toISOString(),
+          actions: remapped.actions.map((action) => action.actionId),
+        },
+      ];
+
+      setSelectedActionId(remapped.actions[0]?.actionId ?? null);
+      setCopyText('');
+      setCopyStatus(`${options.label || templateScript.name || 'Template'} adicionado ao fluxo atual.`);
+      setImportError('');
+
+      return {
+        ...current,
+        metadata: {
+          ...current.metadata,
+          appendedTemplates,
+        },
+        actions: [...current.actions, ...remapped.actions],
+      };
+    });
   }
 
   function updateAction(actionId, updater) {
@@ -386,12 +466,13 @@ export default function NiceScriptWorkspace() {
   async function copyToNice() {
     const output = exportNiceClipboard(script);
     setCopyText(output);
+    const draftNote = validation.isValid ? '' : ' Copiado como rascunho com alertas de validacao.';
 
     try {
       await navigator.clipboard.writeText(output);
-      setCopyStatus('Texto copiado para colar no NICE Studio.');
+      setCopyStatus(`Texto copiado para colar no NICE Studio.${draftNote}`);
     } catch {
-      setCopyStatus('Nao consegui acessar o clipboard; use o texto gerado abaixo.');
+      setCopyStatus(`Nao consegui acessar o clipboard; use o texto gerado abaixo.${draftNote}`);
     }
   }
 
@@ -440,7 +521,7 @@ export default function NiceScriptWorkspace() {
                 <Trash2 size={16} />
                 Limpar canvas
               </button>
-              <button className="secondary-button" type="button" onClick={copyToNice} disabled={!validation.isValid}>
+              <button className="secondary-button" type="button" onClick={copyToNice}>
                 <ClipboardCopy size={16} />
                 Copiar para NICE
               </button>
@@ -492,21 +573,21 @@ export default function NiceScriptWorkspace() {
             <div className="section-header">
               <h2>Templates</h2>
             </div>
-            <button className="nice-template-button" type="button" onClick={() => setMenuWizardOpen(true)}>
+            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'menu', label: 'Menu padrao NICE' })}>
               <Menu size={17} />
               <span>
                 <strong>Menu padrao NICE</strong>
                 <small>Wizard com SET_PARAMS, SIL e REJ</small>
               </span>
             </button>
-            <button className="nice-template-button" type="button" onClick={() => loadScript(makeEntryTemplate())}>
+            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'entry', label: 'Entry padrao PCI', getScript: () => makeEntryTemplate() })}>
               <FileCode2 size={17} />
               <span>
                 <strong>Entry padrao PCI</strong>
                 <small>BEGIN, env/path, RUNSCRIPT</small>
               </span>
             </button>
-            <button className="nice-template-button" type="button" onClick={() => setApiWizardOpen(true)}>
+            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'api', label: 'Chamada API / RUNSUB' })}>
               <Milestone size={17} />
               <span>
                 <strong>Chamada API / RUNSUB</strong>
@@ -539,7 +620,7 @@ export default function NiceScriptWorkspace() {
               <div className="nice-clone-list">
                 {clonedTemplates.map((clone) => (
                   <article className="nice-clone-item" key={clone.id}>
-                    <button type="button" onClick={() => loadScript(clone)}>
+                    <button type="button" onClick={() => requestTemplateInsert({ kind: 'clone', label: clone.name, getScript: () => clone })}>
                       <strong>{clone.name}</strong>
                       <small>{clone.actions.length} actions</small>
                     </button>
@@ -592,10 +673,15 @@ export default function NiceScriptWorkspace() {
           <section className="panel-section nice-panel">
             <div className="section-header">
               <h2>Saida NICE</h2>
-              <button className="icon-button" type="button" onClick={copyToNice} disabled={!validation.isValid} title="Copiar para NICE">
+              <button className="icon-button" type="button" onClick={copyToNice} title="Copiar para NICE">
                 <Copy size={15} />
               </button>
             </div>
+            {!validation.isValid && (
+              <div className="nice-alert is-warning">
+                Existem alertas bloqueantes, mas a saida pode ser copiada como rascunho.
+              </div>
+            )}
             {copyStatus && <div className="nice-alert is-success">{copyStatus}</div>}
             {copyText && <textarea className="nice-output-preview" readOnly value={copyText} />}
           </section>
@@ -604,16 +690,30 @@ export default function NiceScriptWorkspace() {
       )}
       {isMenuWizardOpen && (
         <NiceMenuWizard
-          initialConfig={script.templateType === 'menu' ? script.metadata?.menu : DEFAULT_MENU_CONFIG}
-          onCancel={() => setMenuWizardOpen(false)}
+          initialConfig={templateInsertMode === 'replace' && script.templateType === 'menu' ? script.metadata?.menu : DEFAULT_MENU_CONFIG}
+          onCancel={() => {
+            setMenuWizardOpen(false);
+            setTemplateInsertMode('replace');
+          }}
           onCreate={handleCreateMenuFromWizard}
         />
       )}
       {isApiWizardOpen && (
         <NiceApiWizard
-          initialConfig={script.templateType === 'api' ? script.metadata?.api : DEFAULT_API_CONFIG}
-          onCancel={() => setApiWizardOpen(false)}
+          initialConfig={templateInsertMode === 'replace' && script.templateType === 'api' ? script.metadata?.api : DEFAULT_API_CONFIG}
+          onCancel={() => {
+            setApiWizardOpen(false);
+            setTemplateInsertMode('replace');
+          }}
           onCreate={handleCreateApiFromWizard}
+        />
+      )}
+      {pendingTemplateInsert && (
+        <TemplateInsertChoiceModal
+          templateName={pendingTemplateInsert.label}
+          onCancel={() => setPendingTemplateInsert(null)}
+          onReplace={() => executeTemplateInsert(pendingTemplateInsert, 'replace')}
+          onAppend={() => executeTemplateInsert(pendingTemplateInsert, 'append')}
         />
       )}
       {pendingConnection && (
@@ -816,6 +916,32 @@ function NiceMenuWizard({ initialConfig, onCancel, onCreate }) {
   );
 }
 
+function TemplateInsertChoiceModal({ templateName, onCancel, onReplace, onAppend }) {
+  return (
+    <div className="nice-wizard-backdrop" role="presentation">
+      <section className="nice-choice-modal" role="dialog" aria-modal="true" aria-label="Adicionar template NICE">
+        <header className="nice-wizard-header">
+          <div>
+            <h2>Adicionar template</h2>
+            <p>{templateName}</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={onCancel}>Fechar</button>
+        </header>
+        <div className="nice-choice-body">
+          <button className="nice-choice-card" type="button" onClick={onReplace}>
+            <strong>Comecar do zero</strong>
+            <small>Substitui o canvas atual pelo template selecionado.</small>
+          </button>
+          <button className="nice-choice-card" type="button" onClick={onAppend}>
+            <strong>Adicionar ao fluxo atual</strong>
+            <small>Insere o template sem BEGIN, mantendo o fluxo que ja esta no canvas.</small>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function NiceApiWizard({ initialConfig, onCancel, onCreate }) {
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState(() => ({ ...DEFAULT_API_CONFIG, ...(initialConfig ?? {}) }));
@@ -1009,12 +1135,17 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
 }
 
 function SnippetStudio({ action, onCancel, onApply }) {
-  const textareaRef = useRef(null);
+  const editorRef = useRef(null);
   const [code, setCode] = useState(action.parameters?.[0] ?? '');
-  const warnings = useMemo(() => validateNiceSnippetCode(code), [code]);
+  const [theme, setTheme] = useState(() => localStorage.getItem(SNIPPET_THEME_STORAGE_KEY) || 'light');
+  const diagnostics = useMemo(() => validateNiceSnippetCode(code), [code]);
+
+  useEffect(() => {
+    localStorage.setItem(SNIPPET_THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   function insertBlock(block) {
-    insertAtCursor(textareaRef, code, block.code, setCode);
+    editorRef.current?.insertText(block.code);
   }
 
   return (
@@ -1051,20 +1182,47 @@ function SnippetStudio({ action, onCancel, onApply }) {
           </aside>
 
           <main className="nice-snippet-editor-shell">
-            <label className="nice-field nice-snippet-editor-field">
+            <div className="nice-snippet-editor-toolbar">
               <span>Snippet code</span>
-              <textarea ref={textareaRef} value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} />
-            </label>
+              <div className="nice-theme-toggle" role="group" aria-label="Tema do editor">
+                <button
+                  className={theme === 'light' ? 'is-active' : ''}
+                  type="button"
+                  onClick={() => setTheme('light')}
+                >
+                  Claro
+                </button>
+                <button
+                  className={theme === 'dark' ? 'is-active' : ''}
+                  type="button"
+                  onClick={() => setTheme('dark')}
+                >
+                  Escuro
+                </button>
+              </div>
+            </div>
+            <NiceSnippetCodeMirror
+              ref={editorRef}
+              value={code}
+              diagnostics={diagnostics}
+              theme={theme}
+              onChange={setCode}
+            />
           </main>
 
           <aside className="nice-snippet-validation">
             <div className="section-header">
               <h2>Validacao</h2>
             </div>
-            {warnings.length ? (
+            {diagnostics.length ? (
               <div className="nice-validation-list">
-                {warnings.map((warning, index) => (
-                  <div className="nice-alert is-warning" key={`${warning}-${index}`}>{warning}</div>
+                {diagnostics.map((diagnostic, index) => (
+                  <div
+                    className={`nice-alert ${diagnostic.severity === 'error' ? 'is-error' : 'is-warning'}`}
+                    key={`${diagnostic.message}-${index}`}
+                  >
+                    {diagnostic.message}
+                  </div>
                 ))}
               </div>
             ) : (
@@ -1821,6 +1979,98 @@ function readClonedTemplates() {
   }
 }
 
+function remapTemplateActionsForAppend(currentActions, templateActions) {
+  const sourceActions = (templateActions ?? []).filter((action) => action.action !== 'BEGIN');
+  if (sourceActions.length === 0) return { actions: [] };
+
+  const currentMaxId = getNextActionId(currentActions) - 1;
+  const idMap = new Map();
+  sourceActions.forEach((action, index) => {
+    idMap.set(Number(action.actionId), currentMaxId + index + 1);
+  });
+
+  const offset = calculateAppendOffset(currentActions, sourceActions);
+  const actions = sourceActions.map((action) => remapTemplateAction(action, idMap, offset));
+  return { actions };
+}
+
+function calculateAppendOffset(currentActions, sourceActions) {
+  const currentMaxX = Math.max(120, ...currentActions.map((action) => Number(action.x) || 0));
+  const currentMinY = Math.min(160, ...currentActions.map((action) => Number(action.y) || 0));
+  const sourceMinX = Math.min(...sourceActions.map((action) => Number(action.x) || 0));
+  const sourceMinY = Math.min(...sourceActions.map((action) => Number(action.y) || 0));
+  return {
+    x: currentMaxX + 260 - sourceMinX,
+    y: Math.max(80, currentMinY) - sourceMinY,
+  };
+}
+
+function remapTemplateAction(action, idMap, offset) {
+  const nextId = idMap.get(Number(action.actionId));
+  return {
+    ...action,
+    id: `nice-action-${nextId}`,
+    actionId: nextId,
+    x: Math.round((Number(action.x) || 0) + offset.x),
+    y: Math.round((Number(action.y) || 0) + offset.y),
+    defaultNextAction: remapBranch(action.defaultNextAction, idMap),
+    branches: (action.branches ?? []).map((branch) => remapBranch(branch, idMap)).filter(Boolean),
+    cases: (action.cases ?? []).map((branch) => remapBranch(branch, idMap)).filter(Boolean),
+    parameters: [...(action.parameters ?? [])],
+    extraInfo: remapExtraInfo(action.extraInfo, idMap),
+  };
+}
+
+function remapBranch(branch, idMap) {
+  if (!branch) return null;
+  const oldId = Number(branch.actionId);
+  const nextId = idMap.has(oldId) ? idMap.get(oldId) : -1;
+  return {
+    ...branch,
+    actionId: nextId,
+    segments: (branch.segments ?? []).map((segment) => ({ ...segment })),
+  };
+}
+
+function remapExtraInfo(extraInfo, idMap) {
+  if (!extraInfo) return null;
+  const nextInfo = clonePlainObject(extraInfo);
+  if (Array.isArray(nextInfo.Branches)) {
+    nextInfo.Branches = nextInfo.Branches
+      .map((branch) => remapExtraInfoBranch(branch, idMap))
+      .filter(Boolean);
+  }
+  if (Array.isArray(nextInfo.CaseBranches)) {
+    nextInfo.CaseBranches = nextInfo.CaseBranches
+      .map((branch) => remapExtraInfoBranch(branch, idMap))
+      .filter(Boolean);
+  }
+  if (nextInfo.DefaultBranch) {
+    nextInfo.DefaultBranch = remapExtraInfoBranch(nextInfo.DefaultBranch, idMap) ?? {
+      ...nextInfo.DefaultBranch,
+      ActionId: -1,
+    };
+  }
+  return nextInfo;
+}
+
+function remapExtraInfoBranch(branch, idMap) {
+  if (!branch) return null;
+  const oldId = Number(branch.ActionId);
+  const nextId = idMap.has(oldId) ? idMap.get(oldId) : -1;
+  if (nextId <= 0 && oldId > 0) return null;
+  return {
+    ...branch,
+    ActionId: nextId,
+    Segments: (branch.Segments ?? []).map((segment) => ({ ...segment })),
+  };
+}
+
+function clonePlainObject(value) {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
 function makeDefaultAction(actionType, actionId, position = {}) {
   const base = {
     actionId,
@@ -1830,6 +2080,14 @@ function makeDefaultAction(actionType, actionId, position = {}) {
     y: Math.round(position.y ?? 160),
   };
 
+  if (actionType === 'BEGIN') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Begin',
+      parameters: ['', '', ''],
+      defaultNextAction: makeBranch(-1),
+    });
+  }
   if (actionType === 'SNIPPET') {
     return makeNiceAction({ ...base, parameters: ['', 'Limit2K'] });
   }
@@ -2024,31 +2282,6 @@ function nextCaseIndex(cases) {
   return Math.max(-1, ...cases.map((item) => Number(item.index) || 0)) + 1;
 }
 
-function insertAtCursor(textareaRef, currentCode, blockCode, setCode) {
-  const textarea = textareaRef.current;
-  const separator = currentCode && !currentCode.endsWith('\n') ? '\r\n' : '';
-
-  if (!textarea) {
-    setCode(`${currentCode}${separator}${blockCode}`);
-    return;
-  }
-
-  const start = textarea.selectionStart ?? currentCode.length;
-  const end = textarea.selectionEnd ?? currentCode.length;
-  const before = currentCode.slice(0, start);
-  const after = currentCode.slice(end);
-  const prefix = before && !before.endsWith('\n') ? '\r\n' : '';
-  const suffix = after && !blockCode.endsWith('\n') ? '\r\n' : '';
-  const nextCode = `${before}${prefix}${blockCode}${suffix}${after}`;
-  const nextCursor = before.length + prefix.length + blockCode.length;
-
-  setCode(nextCode);
-  window.requestAnimationFrame(() => {
-    textarea.focus();
-    textarea.setSelectionRange(nextCursor, nextCursor);
-  });
-}
-
 function formatNiceSnippet(code) {
   let indent = 0;
   return String(code ?? '')
@@ -2065,42 +2298,186 @@ function formatNiceSnippet(code) {
 }
 
 function validateNiceSnippetCode(code) {
-  const warnings = [];
+  const diagnostics = [];
   const text = String(code ?? '');
-  if (!text.trim()) return warnings;
+  if (!text.trim()) return diagnostics;
 
-  const openBraces = (text.match(/\{/g) ?? []).length;
-  const closeBraces = (text.match(/\}/g) ?? []).length;
-  if (openBraces !== closeBraces) warnings.push(`Chaves desbalanceadas: ${openBraces} abertura(s) e ${closeBraces} fechamento(s).`);
+  diagnostics.push(...validateBalancedDelimiters(text));
+  const lines = getSnippetLines(text);
+
+  lines.forEach((line, index) => {
+    const trimmed = stripLineComment(line.text).trim();
+    if (!trimmed) return;
+
+    const statementMatch = trimmed.match(/^(?:}\s*)?(IF|ELSE|SWITCH|SELECT|FUNCTION|FOR|FOREACH|REPEAT)\b/i);
+    if (statementMatch && !hasBlockStart(lines, index)) {
+      diagnostics.push(makeSnippetDiagnostic(
+        'error',
+        `${statementMatch[1].toUpperCase()} precisa abrir bloco com { }.`,
+        line.from,
+        line.from + line.text.length,
+      ));
+    }
+
+    if (/^\s*ASSIGN\b/i.test(trimmed) && !trimmed.includes('=')) {
+      diagnostics.push(makeSnippetDiagnostic('warning', 'ASSIGN sem sinal de =.', line.from, line.from + line.text.length));
+    }
+
+    const assignMatch = trimmed.match(/^\s*ASSIGN\s+([^\s=]+)/i);
+    if (assignMatch && !isValidNiceVariable(assignMatch[1])) {
+      const from = line.from + line.text.indexOf(assignMatch[1]);
+      diagnostics.push(makeSnippetDiagnostic('warning', `Variavel "${assignMatch[1]}" pode ser invalida para NICE.`, from, from + assignMatch[1].length));
+    }
+  });
+
+  if (/\bSWITCH\b/i.test(text) && !/\bCASE\b/i.test(text)) {
+    const index = text.search(/\bSWITCH\b/i);
+    diagnostics.push(makeSnippetDiagnostic('error', 'SWITCH precisa ter pelo menos um CASE.', index, index + 6));
+  }
+
+  findCaseOutsideSelection(text).forEach((diagnostic) => diagnostics.push(diagnostic));
 
   if (/scriptpoint/i.test(text) && !/MAPA_DNA/i.test(text)) {
-    warnings.push('scriptpoint usado sem atualizar MAPA_DNA.');
+    diagnostics.push(makeSnippetDiagnostic('warning', 'scriptpoint usado sem atualizar MAPA_DNA.', text.search(/scriptpoint/i)));
   }
   if (/MAPA_DNA/i.test(text) && !/scriptpoint/i.test(text)) {
-    warnings.push('MAPA_DNA usado sem scriptpoint.');
+    diagnostics.push(makeSnippetDiagnostic('warning', 'MAPA_DNA usado sem scriptpoint.', text.search(/MAPA_DNA/i)));
   }
 
   for (const match of text.matchAll(/ASSIGN\s+(?:global:)?AUDIO\s*=\s*"([^"]+)"/gi)) {
     const audio = match[1];
     if (audio && !audio.includes('{') && !/\.wav$/i.test(audio)) {
-      warnings.push(`AUDIO "${audio}" nao termina em .wav.`);
+      diagnostics.push(makeSnippetDiagnostic('warning', `AUDIO "${audio}" nao termina em .wav.`, match.index, match.index + match[0].length));
     }
   }
 
   const looksLikeOutput = /AUDIO|TRANSFERCODE|scriptpoint|MAPA_DNA/i.test(text);
   if (looksLikeOutput && !/NEXT_STEP/i.test(text)) {
-    warnings.push('Snippet parece ser de saida, mas nao define NEXT_STEP.');
+    diagnostics.push(makeSnippetDiagnostic('warning', 'Snippet parece ser de saida, mas nao define NEXT_STEP.', 0));
   }
 
-  if (/\bIF\b/i.test(text) && !/IF[^{]*\{/i.test(text)) {
-    warnings.push('Existe IF sem bloco { } logo apos a condicao.');
+  return diagnostics;
+}
+
+function makeSnippetDiagnostic(severity, message, from = 0, to = from + 1) {
+  const safeFrom = Number.isFinite(from) && from >= 0 ? from : 0;
+  const safeTo = Number.isFinite(to) && to > safeFrom ? to : safeFrom + 1;
+  return { severity, message, from: safeFrom, to: safeTo };
+}
+
+function validateBalancedDelimiters(text) {
+  const diagnostics = [];
+  const openers = { '{': '}', '(': ')', '[': ']' };
+  const closers = { '}': '{', ')': '(', ']': '[' };
+  const stack = [];
+  let quote = '';
+  let escaped = false;
+  let inComment = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (inComment) {
+      if (char === '\n') inComment = false;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote && !escaped) quote = '';
+      escaped = char === '\\' && !escaped;
+      if (char !== '\\') escaped = false;
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      inComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      escaped = false;
+      continue;
+    }
+
+    if (openers[char]) {
+      stack.push({ char, index });
+      continue;
+    }
+
+    if (closers[char]) {
+      const last = stack.pop();
+      if (!last || last.char !== closers[char]) {
+        diagnostics.push(makeSnippetDiagnostic('error', `Fechamento "${char}" sem abertura correspondente.`, index, index + 1));
+      }
+    }
   }
 
-  if (/\bSWITCH\b/i.test(text) && !/\bCASE\b/i.test(text)) {
-    warnings.push('Existe SWITCH sem CASE.');
-  }
+  stack.forEach((item) => {
+    diagnostics.push(makeSnippetDiagnostic('error', `Abertura "${item.char}" sem fechamento correspondente.`, item.index, item.index + 1));
+  });
 
-  return warnings;
+  return diagnostics;
+}
+
+function getSnippetLines(text) {
+  return [...text.matchAll(/^.*$/gm)].map((match) => ({
+    text: match[0],
+    from: match.index,
+  }));
+}
+
+function stripLineComment(line) {
+  const index = line.indexOf('//');
+  return index === -1 ? line : line.slice(0, index);
+}
+
+function hasBlockStart(lines, index) {
+  const current = stripLineComment(lines[index]?.text ?? '');
+  if (current.includes('{')) return true;
+  const nextLine = lines.slice(index + 1).find((line) => stripLineComment(line.text).trim());
+  return Boolean(nextLine && stripLineComment(nextLine.text).trim().startsWith('{'));
+}
+
+function isValidNiceVariable(variable) {
+  return /^(?:global:)?[A-Za-z][A-Za-z0-9_$]*(?:\[[^\]]+\])?(?:\.[A-Za-z][A-Za-z0-9_$]*(?:\([^)]*\))?)*$/.test(variable);
+}
+
+function findCaseOutsideSelection(text) {
+  const diagnostics = [];
+  const lines = getSnippetLines(text);
+  let depth = 0;
+  let selectionDepth = 0;
+  let pendingSelection = false;
+
+  lines.forEach((line) => {
+    const cleanLine = stripLineComment(line.text);
+    const trimmed = cleanLine.trim();
+    const startsSelection = /^(SWITCH|SELECT)\b/i.test(trimmed);
+    const startsCase = /^(CASE|DEFAULT)\b/i.test(trimmed);
+    const opens = (cleanLine.match(/\{/g) ?? []).length;
+    const closes = (cleanLine.match(/\}/g) ?? []).length;
+
+    if (startsCase && selectionDepth <= 0 && !pendingSelection) {
+      diagnostics.push(makeSnippetDiagnostic('error', `${trimmed.split(/\s+/)[0].toUpperCase()} fora de SWITCH ou SELECT.`, line.from, line.from + line.text.length));
+    }
+
+    if (startsSelection) pendingSelection = true;
+    if (pendingSelection && opens > 0) {
+      selectionDepth += opens;
+      pendingSelection = false;
+    } else if (selectionDepth > 0) {
+      selectionDepth += opens;
+    }
+
+    depth += opens - closes;
+    if (selectionDepth > 0) selectionDepth = Math.max(0, selectionDepth - closes);
+    if (depth < 0) depth = 0;
+  });
+
+  return diagnostics;
 }
 
 function simulateNiceFlow(script, context = {}) {

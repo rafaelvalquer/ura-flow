@@ -946,6 +946,53 @@ button:disabled {
   box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
 }
 
+.nice-choice-modal {
+  width: min(520px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+}
+
+.nice-choice-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.nice-choice-card {
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.nice-choice-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.nice-choice-card strong {
+  font-size: 14px;
+}
+
+.nice-choice-card small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .nice-snippet-studio {
   width: min(1180px, calc(100vw - 42px));
   height: min(760px, calc(100vh - 42px));
@@ -978,6 +1025,67 @@ button:disabled {
   border-radius: 8px;
   padding: 12px;
   background: #ffffff;
+}
+
+.nice-snippet-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.nice-snippet-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.nice-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 3px;
+  background: #f8fafc;
+}
+
+.nice-theme-toggle button {
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.nice-theme-toggle button.is-active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.nice-codemirror-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+}
+
+.nice-codemirror-shell .cm-editor {
+  height: 100%;
+}
+
+.nice-codemirror-shell .cm-focused {
+  outline: 2px solid rgba(37, 99, 235, 0.22);
+  outline-offset: -2px;
 }
 
 .nice-snippet-block-list {

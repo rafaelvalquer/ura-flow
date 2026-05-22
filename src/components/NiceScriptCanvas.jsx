@@ -79,7 +79,14 @@ export default function NiceScriptCanvas({
 
   function handleNodesChange(changes) {
     if (readOnly) {
-      onNodesChange(changes.filter((change) => change.type !== 'position'));
+      onNodesChange(changes.filter((change) => change.type !== 'position' && change.type !== 'remove'));
+      return;
+    }
+
+    const removedNodes = changes.filter((change) => change.type === 'remove');
+    if (removedNodes.length > 0) {
+      removedNodes.forEach((change) => onDeleteAction?.(Number(change.id)));
+      onNodesChange(changes.filter((change) => change.type !== 'remove'));
       return;
     }
 
@@ -101,6 +108,25 @@ export default function NiceScriptCanvas({
   function handleNodeDragStop(_, node) {
     if (readOnly) return;
     onMoveAction?.(node.data.actionId, node.position);
+  }
+
+  function handleEdgesChange(changes) {
+    if (readOnly) {
+      onEdgesChange(changes.filter((change) => change.type !== 'remove'));
+      return;
+    }
+
+    const removedEdges = changes.filter((change) => change.type === 'remove');
+    if (removedEdges.length > 0) {
+      removedEdges.forEach((change) => {
+        const edge = flowEdges.find((item) => item.id === change.id);
+        if (edge) onDeleteConnection?.(edge.data);
+      });
+      onEdgesChange(changes.filter((change) => change.type !== 'remove'));
+      return;
+    }
+
+    onEdgesChange(changes);
   }
 
   function handleConnect(connection) {
@@ -138,7 +164,7 @@ export default function NiceScriptCanvas({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={handleNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
@@ -149,7 +175,7 @@ export default function NiceScriptCanvas({
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         nodesFocusable={!readOnly}
-        deleteKeyCode={readOnly ? null : 'Delete'}
+        deleteKeyCode={null}
         fitView
       >
         <Background color="#CBD5E1" gap={18} size={1} />
