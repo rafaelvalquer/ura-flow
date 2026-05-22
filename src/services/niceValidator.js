@@ -24,10 +24,14 @@ export function validateNiceScript(script) {
     if (action.action === 'RUNSUB') validateRunsub(action, errors);
     if (action.action === 'IF') validateIf(action, errors, warnings);
     if (action.action === 'PLAY') validatePlay(action, errors);
+    if (action.action === 'REST_API') validateRestApi(action, errors);
+    if (action.action === 'WORKFLOWDATA') validateWorkflowData(action, errors);
+    if (action.action === 'RETURN') validateReturn(action, warnings);
     if (action.action === 'SNIPPET') validateSnippet(action, warnings);
   });
 
   validateMenuMask(actions, warnings);
+  validateRestApiTemplate(actions, warnings);
 
   return {
     errors,
@@ -111,6 +115,28 @@ function validatePlay(action, errors) {
   if (!prompt) errors.push(`${action.caption}: PLAY sem prompt/audio configurado.`);
 }
 
+function validateRestApi(action, errors) {
+  const params = action.parameters ?? [];
+  if (!params[0]) errors.push(`${action.caption}: REST_API sem operacao configurada.`);
+  if (!params[1]) errors.push(`${action.caption}: REST_API sem URL configurada.`);
+  if (!params[4]) errors.push(`${action.caption}: REST_API sem metodo HTTP.`);
+  if (!params[5]) errors.push(`${action.caption}: REST_API sem timeout.`);
+  if (!params[6]) errors.push(`${action.caption}: REST_API sem variavel de resultset.`);
+}
+
+function validateWorkflowData(action, errors) {
+  if (!String(action.parameters?.[0] ?? '').trim()) {
+    errors.push(`${action.caption}: WORKFLOWDATA sem chave configurada.`);
+  }
+}
+
+function validateReturn(action, warnings) {
+  const value = String(action.parameters?.[0] ?? '').trim();
+  if (value && value !== '0') {
+    warnings.push(`${action.caption}: RETURN usa valor "${value}". Confira se este retorno e esperado.`);
+  }
+}
+
 function validateSnippet(action, warnings) {
   const code = action.parameters?.[0] ?? '';
   if (!code) return;
@@ -160,4 +186,18 @@ function validateMenuMask(actions, warnings) {
       warnings.push(`Mascara ${mask}: opcao ${option} nao existe no CASE/SWITCH.`);
     }
   });
+}
+
+function validateRestApiTemplate(actions, warnings) {
+  if (!actions.some((action) => action.action === 'REST_API')) return;
+
+  if (!actions.some((action) => action.action === 'RUNSUB' && /Alerta erro API/i.test(action.caption))) {
+    warnings.push('API REST: Alerta_ErroAPI esta desligado ou nao foi encontrado.');
+  }
+
+  const responseSnippet = actions.find((action) => action.action === 'SNIPPET' && /Dados RESPONSE/i.test(action.caption) && !/Fechada/i.test(action.caption));
+  const responseCode = responseSnippet?.parameters?.[0] ?? '';
+  if (responseSnippet && !/\b[A-Za-z0-9_:]+_RET\b/i.test(responseCode)) {
+    warnings.push(`${responseSnippet.caption}: nao encontrei atribuicao para variavel *_RET.`);
+  }
 }

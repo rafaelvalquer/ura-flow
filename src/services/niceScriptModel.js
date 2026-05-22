@@ -10,6 +10,10 @@ export const NICE_LIBRARY_IDS = {
   IF: '6695ba9c-e1d6-4f3c-a15a-94f1400e3169',
   ASSIGN: '9015c095-98d9-441f-bf92-e90f5c5ed8c8',
   PLAY: 'b1b9a2dd-65b6-4626-9cf5-9cfa69cf59e2',
+  REST_API: '58437195-da97-436e-8c3d-7ff126b719d7',
+  WORKFLOWDATA: '730aa8de-00a4-4ecc-ae0c-838d366bcae1',
+  RETURN: '29864722-5314-434e-9d61-6e2019a0d9fd',
+  ANNOTATION: 'd28d2b39-d4db-499a-9b8b-f3879e4c5b25',
 };
 
 export const NICE_ACTION_LABELS = {
@@ -24,6 +28,10 @@ export const NICE_ACTION_LABELS = {
   IF: 'If',
   ASSIGN: 'Assign',
   PLAY: 'Play',
+  REST_API: 'Rest API',
+  WORKFLOWDATA: 'Workflow data',
+  RETURN: 'Return',
+  ANNOTATION: 'Annotation',
 };
 
 export function makeNiceScript({ name, source = 'template', templateType = '', actions = [], metadata = {} }) {

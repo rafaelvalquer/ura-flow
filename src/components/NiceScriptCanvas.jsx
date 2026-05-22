@@ -27,6 +27,7 @@ export default function NiceScriptCanvas({
   selectedActionId,
   simulation,
   readOnly = false,
+  focusActionRequest = null,
   onSelectAction,
   onClearSelection,
   onMoveAction,
@@ -39,19 +40,43 @@ export default function NiceScriptCanvas({
   const simulatedEdgeIds = useMemo(() => new Set(simulation?.edgeIds ?? []), [simulation]);
   const nodes = useMemo(() => makeNiceNodes(script, selectedActionId, simulatedActionIds), [script, selectedActionId, simulatedActionIds]);
   const edges = useMemo(() => makeNiceEdges(script, simulatedEdgeIds), [script, simulatedEdgeIds]);
+  const layoutKey = useMemo(() => makeLayoutKey(script), [script]);
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
   const initializedRef = useRef(false);
-  const { fitView, screenToFlowPosition } = useReactFlow();
+  const { fitView, getViewport, screenToFlowPosition, setCenter, setViewport } = useReactFlow();
 
   useEffect(() => {
     setNodes(nodes);
     setEdges(edges);
+  }, [nodes, edges, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!nodes.length) return;
     window.requestAnimationFrame(() => {
-      fitView({ padding: 0.22, duration: initializedRef.current ? 180 : 320 });
+      const duration = initializedRef.current ? 180 : 320;
+      Promise.resolve(fitView({ padding: 0.22, duration })).then(() => {
+        setViewport(getTopAlignedViewport(nodes, getViewport()), { duration: initializedRef.current ? 180 : 320 });
+      });
       initializedRef.current = true;
     });
-  }, [nodes, edges, setNodes, setEdges, fitView]);
+  }, [layoutKey, fitView, getViewport, setViewport]);
+
+  useEffect(() => {
+    const actionId = Number(focusActionRequest?.actionId);
+    if (!actionId) return;
+    const node = flowNodes.find((item) => Number(item.data?.actionId) === actionId);
+    if (!node) return;
+
+    const width = node.measured?.width ?? node.width ?? 220;
+    const height = node.measured?.height ?? node.height ?? 96;
+    const viewport = getViewport();
+    setCenter(
+      node.position.x + width / 2,
+      node.position.y + height / 2,
+      { zoom: Math.max(Number(viewport.zoom) || 1, 1), duration: 360 },
+    );
+  }, [focusActionRequest?.nonce, focusActionRequest?.actionId, getViewport, setCenter]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -176,7 +201,6 @@ export default function NiceScriptCanvas({
         nodesConnectable={!readOnly}
         nodesFocusable={!readOnly}
         deleteKeyCode={null}
-        fitView
       >
         <Background color="#CBD5E1" gap={18} size={1} />
         <Controls />
@@ -283,4 +307,30 @@ function AnimatedSvgEdge({
 function isEditableTarget(target) {
   const tagName = target?.tagName?.toLowerCase();
   return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target?.isContentEditable;
+}
+
+function makeLayoutKey(script) {
+  return (script?.actions ?? [])
+    .map((action) => [
+      action.actionId,
+      Math.round(Number(action.x) || 0),
+      Math.round(Number(action.y) || 0),
+      action.defaultNextAction?.actionId ?? '',
+      (action.branches ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
+      (action.cases ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
+    ].join('|'))
+    .join(';');
+}
+
+function getTopAlignedViewport(nodes, viewport) {
+  if (!nodes.length) return viewport;
+
+  const minY = Math.min(...nodes.map((node) => Number(node.position?.y) || 0));
+  const zoom = Number(viewport?.zoom) || 1;
+  const topPadding = 56;
+
+  return {
+    ...viewport,
+    y: topPadding - minY * zoom,
+  };
 }

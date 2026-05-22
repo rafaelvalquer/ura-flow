@@ -7,12 +7,14 @@ import { exportNiceClipboard } from '../services/niceClipboardExporter.js';
 import {
   DEFAULT_API_CONFIG,
   DEFAULT_MENU_CONFIG,
+  DEFAULT_REST_API_CONFIG,
   makeApiDestination,
   makeApiTemplate,
   makeEntryTemplate,
   makeMenuOption,
   makeMenuSnippets,
   makeMenuTemplate,
+  makeRestApiTemplate,
 } from '../services/niceTemplateFactory.js';
 import { parseNiceXml } from '../services/niceXmlParser.js';
 import { validateNiceScript } from '../services/niceValidator.js';
@@ -21,7 +23,7 @@ import { organizeNiceScript } from '../services/niceLayout.js';
 const DRAFT_STORAGE_KEY = 'ura-flow:nice-script:draft';
 const CLONES_STORAGE_KEY = 'ura-flow:nice-script:clones';
 const SNIPPET_THEME_STORAGE_KEY = 'ura-flow:nice-script:snippet-theme';
-const MANUAL_ACTION_TYPES = ['BEGIN', 'SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
+const MANUAL_ACTION_TYPES = ['BEGIN', 'SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'REST_API', 'WORKFLOWDATA', 'RETURN', 'ANNOTATION', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
 const SNIPPET_VARIABLES = ['NEXT_STEP', 'AUDIO', 'MRES', 'OP_ESCOLHIDA', 'scriptpoint', 'MAPA_DNA', '{pathStep}', '{pathAPI}', '{path_audio}'];
 const SNIPPET_BLOCKS = [
   {
@@ -95,6 +97,7 @@ export default function NiceScriptWorkspace() {
   const [importError, setImportError] = useState('');
   const [isMenuWizardOpen, setMenuWizardOpen] = useState(false);
   const [isApiWizardOpen, setApiWizardOpen] = useState(false);
+  const [isRestApiWizardOpen, setRestApiWizardOpen] = useState(false);
   const [pendingTemplateInsert, setPendingTemplateInsert] = useState(null);
   const [templateInsertMode, setTemplateInsertMode] = useState('replace');
   const [manualActionType, setManualActionType] = useState('SNIPPET');
@@ -102,6 +105,7 @@ export default function NiceScriptWorkspace() {
   const [snippetStudioActionId, setSnippetStudioActionId] = useState(null);
   const [niceMode, setNiceMode] = useState('builder');
   const [simulationNodeOutputs, setSimulationNodeOutputs] = useState({});
+  const [focusActionRequest, setFocusActionRequest] = useState(null);
   const fileInputRef = useRef(null);
   const validation = useMemo(() => validateNiceScript(script), [script]);
   const simulation = useMemo(
@@ -150,6 +154,11 @@ export default function NiceScriptWorkspace() {
       return;
     }
 
+    if (templateRequest.kind === 'restApi') {
+      setRestApiWizardOpen(true);
+      return;
+    }
+
     const nextScript = templateRequest.getScript();
     if (mode === 'append') {
       appendTemplateScript(nextScript, { label: templateRequest.label });
@@ -173,6 +182,16 @@ export default function NiceScriptWorkspace() {
     setApiWizardOpen(false);
     if (templateInsertMode === 'append') {
       appendTemplateScript(nextScript, { label: 'Chamada API / RUNSUB' });
+      setTemplateInsertMode('replace');
+      return;
+    }
+    loadScript(nextScript);
+  }
+
+  function handleCreateRestApiFromWizard(nextScript) {
+    setRestApiWizardOpen(false);
+    if (templateInsertMode === 'append') {
+      appendTemplateScript(nextScript, { label: 'API REST NICE' });
       setTemplateInsertMode('replace');
       return;
     }
@@ -463,6 +482,13 @@ export default function NiceScriptWorkspace() {
     }));
   }
 
+  function focusActionFromValidation(message) {
+    const action = findValidationAction(script.actions, message);
+    if (!action) return;
+    setSelectedActionId(action.actionId);
+    setFocusActionRequest({ actionId: action.actionId, nonce: Date.now() });
+  }
+
   async function copyToNice() {
     const output = exportNiceClipboard(script);
     setCopyText(output);
@@ -556,6 +582,7 @@ export default function NiceScriptWorkspace() {
             selectedActionId={selectedActionId}
             simulation={simulation}
             readOnly
+            focusActionRequest={focusActionRequest}
             onSelectAction={setSelectedActionId}
             onClearSelection={() => setSelectedActionId(null)}
           />
@@ -563,7 +590,7 @@ export default function NiceScriptWorkspace() {
           <aside className="nice-simulator-right">
             <SimulationVariablesPanel variables={simulation.variables} warnings={simulation.warnings} />
             <SimulationTimeline simulation={simulation} />
-            <ValidationPanel validation={validation} />
+            <ValidationPanel validation={validation} actions={script.actions} onFocusAction={focusActionFromValidation} />
           </aside>
         </div>
       ) : (
@@ -592,6 +619,13 @@ export default function NiceScriptWorkspace() {
               <span>
                 <strong>Chamada API / RUNSUB</strong>
                 <small>RUNSUB, IF e destinos True/False</small>
+              </span>
+            </button>
+            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'restApi', label: 'API REST NICE' })}>
+              <Milestone size={17} />
+              <span>
+                <strong>API REST NICE</strong>
+                <small>WORKFLOWDATA, REST_API, tratamento e RETURN</small>
               </span>
             </button>
             <input ref={fileInputRef} className="sr-only" type="file" accept=".xml" onChange={handleImportXml} />
@@ -638,6 +672,7 @@ export default function NiceScriptWorkspace() {
           script={script}
           selectedActionId={selectedActionId}
           simulation={null}
+          focusActionRequest={focusActionRequest}
           onSelectAction={setSelectedActionId}
           onClearSelection={() => setSelectedActionId(null)}
           onMoveAction={updateActionPosition}
@@ -648,7 +683,7 @@ export default function NiceScriptWorkspace() {
         />
 
         <aside className="nice-right-panel">
-          <ValidationPanel validation={validation} />
+          <ValidationPanel validation={validation} actions={script.actions} onFocusAction={focusActionFromValidation} />
           {script.templateType === 'menu' && script.metadata?.menu && (
             <MenuConfigPanel
               menu={script.metadata.menu}
@@ -706,6 +741,16 @@ export default function NiceScriptWorkspace() {
             setTemplateInsertMode('replace');
           }}
           onCreate={handleCreateApiFromWizard}
+        />
+      )}
+      {isRestApiWizardOpen && (
+        <NiceRestApiWizard
+          initialConfig={templateInsertMode === 'replace' && script.templateType === 'restApi' ? script.metadata?.restApi : DEFAULT_REST_API_CONFIG}
+          onCancel={() => {
+            setRestApiWizardOpen(false);
+            setTemplateInsertMode('replace');
+          }}
+          onCreate={handleCreateRestApiFromWizard}
         />
       )}
       {pendingTemplateInsert && (
@@ -1060,6 +1105,157 @@ function NiceApiWizard({ initialConfig, onCancel, onCreate }) {
   );
 }
 
+function NiceRestApiWizard({ initialConfig, onCancel, onCreate }) {
+  const [step, setStep] = useState(0);
+  const [config, setConfig] = useState(() => ({ ...DEFAULT_REST_API_CONFIG, ...(initialConfig ?? {}) }));
+  const previewScript = useMemo(() => makeRestApiTemplate(config), [config]);
+  const validation = useMemo(() => validateNiceScript(previewScript), [previewScript]);
+  const restApi = previewScript.metadata.restApi;
+  const steps = ['Dados', 'Request', 'Retorno', 'Tratamento', 'Snippets', 'Revisao'];
+
+  function updateConfig(patch) {
+    setConfig((current) => ({ ...current, ...patch }));
+  }
+
+  function updateSnippetOverride(key, value) {
+    updateConfig({ [key]: value });
+  }
+
+  return (
+    <div className="nice-wizard-backdrop" role="presentation">
+      <section className="nice-wizard nice-rest-api-wizard" role="dialog" aria-modal="true" aria-label="Criar API REST NICE">
+        <header className="nice-wizard-header">
+          <div>
+            <h2>Criar API REST NICE</h2>
+            <p>{steps[step]}</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={onCancel}>Fechar</button>
+        </header>
+
+        <div className="nice-wizard-steps">
+          {steps.map((label, index) => (
+            <span className={index === step ? 'active' : ''} key={label}>{index + 1}. {label}</span>
+          ))}
+        </div>
+
+        <div className="nice-wizard-body">
+          {step === 0 && (
+            <div className="nice-wizard-grid">
+              <Field label="Nome do script" value={config.scriptName} onChange={(value) => updateConfig({ scriptName: value })} />
+              <Field label="Nome servico" value={config.serviceName} onChange={(value) => updateConfig({ serviceName: value })} />
+              <SelectField
+                label="Tipo de bloqueio"
+                value={config.blockProvider}
+                onChange={(value) => updateConfig({ blockProvider: value })}
+                options={[
+                  { value: 'Integrador', label: 'Integrador' },
+                  { value: 'AWS', label: 'AWS' },
+                  { value: 'Apigee', label: 'Apigee' },
+                ]}
+              />
+              <Field label="Chave WORKFLOWDATA" value={config.workflowKey} onChange={(value) => updateConfig({ workflowKey: value })} />
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="nice-wizard-grid">
+              <SelectField
+                label="Metodo"
+                value={config.method}
+                onChange={(value) => updateConfig({ method: value })}
+                options={[
+                  { value: 'POST', label: 'POST' },
+                  { value: 'GET', label: 'GET' },
+                  { value: 'PUT', label: 'PUT' },
+                  { value: 'PATCH', label: 'PATCH' },
+                  { value: 'DELETE', label: 'DELETE' },
+                ]}
+              />
+              <Field label="Timeout" value={config.timeout} onChange={(value) => updateConfig({ timeout: value })} />
+              <Field label="Header JSON" value={config.headerJson} onChange={(value) => updateConfig({ headerJson: value })} />
+              <Field label="Body JSON" value={config.bodyJson} onChange={(value) => updateConfig({ bodyJson: value })} />
+              <Field label="Resultset" value={config.resultSetVar} onChange={(value) => updateConfig({ resultSetVar: value })} />
+              <Field label="Error list" value={config.errorListVar} onChange={(value) => updateConfig({ errorListVar: value })} />
+              <TextareaField label="URL DEV" value={config.urlDev} onChange={(value) => updateConfig({ urlDev: value })} />
+              <TextareaField label="URL PRD" value={config.urlPrd} onChange={(value) => updateConfig({ urlPrd: value })} />
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="nice-wizard-grid">
+              <TextareaField
+                label="Variaveis globais de saida (uma por linha)"
+                value={config.outputVarsText}
+                onChange={(value) => updateConfig({ outputVarsText: value })}
+              />
+              <div>
+                <Field label="Variavel principal RET" value={config.mainReturnVar} onChange={(value) => updateConfig({ mainReturnVar: value })} />
+                <Field label="Valor API fechada" value={config.closedReturnValue} onChange={(value) => updateConfig({ closedReturnValue: value })} />
+                <TextareaField label="Annotation opcional" value={config.annotationText} onChange={(value) => updateConfig({ annotationText: value })} />
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="nice-wizard-grid">
+              <TextareaField
+                label="Expressao de sucesso"
+                value={config.successExpression}
+                onChange={(value) => updateConfig({ successExpression: value })}
+              />
+              <div>
+                <CheckboxField label="Gerar Alerta_ErroAPI" checked={config.enableErrorAlert} onChange={(value) => updateConfig({ enableErrorAlert: value })} />
+                <Field label="Script Alerta_ErroAPI" value={config.alertScriptPath} onChange={(value) => updateConfig({ alertScriptPath: value })} />
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="nice-wizard-snippets">
+              <TextareaField label="CHAVES_APIs" value={config.chavesSnippetOverride || restApi.chavesSnippetOverride || previewScript.actions.find((action) => action.caption === 'CHAVES_APIs')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('chavesSnippetOverride', value)} />
+              <TextareaField label="Criacao de parametros" value={config.initSnippetOverride || previewScript.actions.find((action) => action.caption === 'Criacao de parametros')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('initSnippetOverride', value)} />
+              <TextareaField label="Dados REQUEST" value={config.requestSnippetOverride || previewScript.actions.find((action) => action.caption === 'Dados REQUEST')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('requestSnippetOverride', value)} />
+              <TextareaField label="Dados RESPONSE" value={config.responseSnippetOverride || previewScript.actions.find((action) => action.caption === 'Dados RESPONSE')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('responseSnippetOverride', value)} />
+              <TextareaField label="dados CDR" value={config.cdrSnippetOverride || previewScript.actions.find((action) => action.caption === 'dados CDR')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('cdrSnippetOverride', value)} />
+              <TextareaField label="Tratamento erro" value={config.errorSnippetOverride || previewScript.actions.find((action) => action.caption === 'Tratamento erro')?.parameters?.[0] || ''} onChange={(value) => updateSnippetOverride('errorSnippetOverride', value)} />
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="nice-review-grid">
+              <ValidationPanel validation={validation} />
+              <section className="panel-section nice-panel">
+                <div className="section-header">
+                  <h2>Actions</h2>
+                  <span className="selected-pill">{previewScript.actions.length}</span>
+                </div>
+                <div className="nice-action-review-list">
+                  {previewScript.actions.map((action) => (
+                    <span key={action.actionId}>#{action.actionId} {action.action} - {action.caption}</span>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+
+        <footer className="nice-wizard-footer">
+          <button className="ghost-button" type="button" onClick={step === 0 ? onCancel : () => setStep((value) => value - 1)}>
+            {step === 0 ? 'Cancelar' : 'Voltar'}
+          </button>
+          {step < steps.length - 1 ? (
+            <button className="secondary-button" type="button" onClick={() => setStep((value) => value + 1)}>Next</button>
+          ) : (
+            <button className="secondary-button" type="button" onClick={() => onCreate(previewScript)} disabled={!validation.isValid}>
+              Criar API no canvas
+            </button>
+          )}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onApply }) {
   const connectionOptions = useMemo(() => getAvailableConnectionOptions(sourceAction), [sourceAction]);
   const [selectedKey, setSelectedKey] = useState(connectionOptions[0]?.key ?? '');
@@ -1274,7 +1470,30 @@ function ActionPalette({ onAddAction }) {
   );
 }
 
-function ValidationPanel({ validation }) {
+function ValidationPanel({ validation, actions = [], onFocusAction }) {
+  function renderItem(message, kind, index) {
+    const action = findValidationAction(actions, message);
+    const className = `nice-alert is-${kind}`;
+    const key = `${kind}-${index}`;
+
+    if (!action || !onFocusAction) {
+      return <div className={className} key={key}>{message}</div>;
+    }
+
+    return (
+      <button
+        className={`${className} nice-validation-button`}
+        type="button"
+        key={key}
+        onClick={() => onFocusAction(message)}
+        title={`Selecionar node #${action.actionId}`}
+      >
+        <span>{message}</span>
+        <small>Focar #{action.actionId}</small>
+      </button>
+    );
+  }
+
   return (
     <section className="panel-section nice-panel">
       <div className="section-header">
@@ -1285,12 +1504,8 @@ function ValidationPanel({ validation }) {
         <p className="nice-empty-text">Nenhum gap encontrado.</p>
       ) : (
         <div className="nice-validation-list">
-          {validation.errors.map((message, index) => (
-            <div className="nice-alert is-error" key={`error-${index}`}>{message}</div>
-          ))}
-          {validation.warnings.map((message, index) => (
-            <div className="nice-alert is-warning" key={`warning-${index}`}>{message}</div>
-          ))}
+          {validation.errors.map((message, index) => renderItem(message, 'error', index))}
+          {validation.warnings.map((message, index) => renderItem(message, 'warning', index))}
         </div>
       )}
     </section>
@@ -1729,7 +1944,10 @@ function ActionEditor({ action, onChange, onParameterChange, onBranchChange, onD
       {action.action === 'PLAY' && <PlayActionEditor action={action} onParameterChange={onParameterChange} />}
       {action.action === 'IF' && <IfActionEditor action={action} onParameterChange={onParameterChange} />}
       {action.action === 'LOOP' && <LoopActionEditor action={action} onParameterChange={onParameterChange} />}
-      {!['MENU', 'RUNSUB', 'PLAY', 'IF', 'LOOP'].includes(action.action) && (
+      {action.action === 'REST_API' && <RestApiActionEditor action={action} onParameterChange={onParameterChange} />}
+      {action.action === 'WORKFLOWDATA' && <WorkflowDataActionEditor action={action} onParameterChange={onParameterChange} />}
+      {action.action === 'RETURN' && <ReturnActionEditor action={action} onParameterChange={onParameterChange} />}
+      {!['MENU', 'RUNSUB', 'PLAY', 'IF', 'LOOP', 'REST_API', 'WORKFLOWDATA', 'RETURN'].includes(action.action) && (
         <GenericParameterEditor action={action} onParameterChange={onParameterChange} onOpenSnippetStudio={onOpenSnippetStudio} />
       )}
 
@@ -1820,6 +2038,43 @@ function LoopActionEditor({ action, onParameterChange }) {
         <Field label="Quantidade max" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
         <Field label="Contador" value={action.parameters?.[1] ?? ''} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
       </div>
+    </div>
+  );
+}
+
+function RestApiActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>REST_API</strong>
+      <Field label="Operacao" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+      <Field label="URL" value={action.parameters?.[1] ?? ''} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
+      <div className="nice-form-grid">
+        <Field label="Header JSON" value={action.parameters?.[2] ?? ''} onChange={(value) => onParameterChange(action.actionId, 2, value)} />
+        <Field label="Body JSON" value={action.parameters?.[3] ?? ''} onChange={(value) => onParameterChange(action.actionId, 3, value)} />
+        <Field label="Metodo" value={action.parameters?.[4] ?? ''} onChange={(value) => onParameterChange(action.actionId, 4, value)} />
+        <Field label="Timeout" value={action.parameters?.[5] ?? ''} onChange={(value) => onParameterChange(action.actionId, 5, value)} />
+        <Field label="Resultset" value={action.parameters?.[6] ?? ''} onChange={(value) => onParameterChange(action.actionId, 6, value)} />
+        <Field label="Error list" value={action.parameters?.[7] ?? ''} onChange={(value) => onParameterChange(action.actionId, 7, value)} />
+      </div>
+      <Field label="Response headers" value={action.parameters?.[8] ?? ''} onChange={(value) => onParameterChange(action.actionId, 8, value)} />
+    </div>
+  );
+}
+
+function WorkflowDataActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>WORKFLOWDATA</strong>
+      <Field label="Chave" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+    </div>
+  );
+}
+
+function ReturnActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>RETURN</strong>
+      <Field label="Valor retorno" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
     </div>
   );
 }
@@ -2100,6 +2355,28 @@ function makeDefaultAction(actionType, actionId, position = {}) {
   if (actionType === 'RUNSUB') {
     return makeNiceAction({ ...base, caption: 'Ws_ChamadaApi', parameters: ['', '', 'RTN'] });
   }
+  if (actionType === 'REST_API') {
+    return makeNiceAction({
+      ...base,
+      caption: 'consulta_servico',
+      parameters: ['MakeRestRequest', '{url}', '{headerjson}', '{bodyjson}', 'POST', '4000', 'resultSet', 'errorArgList', 'responseHeaders'],
+      defaultNextAction: makeBranch(-1),
+    });
+  }
+  if (actionType === 'WORKFLOWDATA') {
+    return makeNiceAction({
+      ...base,
+      caption: 'CHAVE APIs',
+      parameters: ['API_Desliga'],
+      defaultNextAction: makeBranch(-1),
+    });
+  }
+  if (actionType === 'RETURN') {
+    return makeNiceAction({ ...base, caption: 'Default', parameters: ['0'] });
+  }
+  if (actionType === 'ANNOTATION') {
+    return makeNiceAction({ ...base, caption: 'Annotation', parameters: ['', '191', '116'] });
+  }
   if (actionType === 'IF') {
     return makeNiceAction({
       ...base,
@@ -2177,6 +2454,26 @@ function sameBranch(left, right) {
     && String(left?.text ?? '') === String(right?.text ?? '');
 }
 
+function findValidationAction(actions = [], message = '') {
+  const text = String(message ?? '');
+  const captionPrefix = text.split(':')[0]?.trim();
+  if (!captionPrefix) return null;
+
+  const exactCaption = actions.find((action) => String(action.caption ?? '').trim() === captionPrefix);
+  if (exactCaption) return exactCaption;
+
+  const idMatch = text.match(/ActionID\s+(\d+)|node\s+#?(\d+)|#(\d+)/i);
+  const referencedId = Number(idMatch?.[1] ?? idMatch?.[2] ?? idMatch?.[3]);
+  if (Number.isFinite(referencedId) && referencedId > 0) {
+    const sourceAction = actions.find((action) => text.startsWith(`${action.caption}:`));
+    if (sourceAction) return sourceAction;
+    return actions.find((action) => Number(action.actionId) === referencedId) ?? null;
+  }
+
+  const lowerPrefix = captionPrefix.toLowerCase();
+  return actions.find((action) => String(action.caption ?? '').trim().toLowerCase() === lowerPrefix) ?? null;
+}
+
 function getAvailableConnectionOptions(sourceAction) {
   if (!sourceAction) return [];
 
@@ -2224,7 +2521,7 @@ function getAvailableConnectionOptions(sourceAction) {
     ].filter(Boolean);
   }
 
-  if (['RUNSCRIPT'].includes(sourceAction.action)) {
+  if (['RUNSCRIPT', 'RETURN', 'ANNOTATION'].includes(sourceAction.action)) {
     return [];
   }
 

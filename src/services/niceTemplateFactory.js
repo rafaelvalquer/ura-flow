@@ -48,6 +48,35 @@ export const DEFAULT_API_CONFIG = {
   falseDestination: makeApiDestination('SNIPPET', 'Falha API'),
 };
 
+export const DEFAULT_REST_API_CONFIG = {
+  scriptName: 'API_NomeServico',
+  serviceName: 'nomeServico',
+  blockProvider: 'Integrador',
+  workflowKey: 'API_Desliga',
+  method: 'POST',
+  urlDev: 'https://ura-infracc-dev.claro.com.br/integrador/servico?servico=nomeServico',
+  urlPrd: 'https://ura-infracc.claro.com.br/integrador/servico?servico=nomeServico',
+  timeout: '4000',
+  headerJson: '{headerjson}',
+  bodyJson: '{bodyjson}',
+  resultSetVar: 'resultSet',
+  errorListVar: 'errorArgList',
+  responseHeadersVar: 'responseHeaders',
+  outputVarsText: 'global:nomeServico_RET',
+  mainReturnVar: 'global:nomeServico_RET',
+  closedReturnValue: 'NOK',
+  successExpression: '_replycode = 1 | ivrCode = "404" | ivrCode = "422"',
+  enableErrorAlert: true,
+  alertScriptPath: "~\\{iifs(global:env = 'PRD','PRD','DEV')}\\Alerta_ErroAPI",
+  annotationText: '',
+  chavesSnippetOverride: '',
+  initSnippetOverride: '',
+  requestSnippetOverride: '',
+  responseSnippetOverride: '',
+  cdrSnippetOverride: '',
+  errorSnippetOverride: '',
+};
+
 export function makeExitConfig(audio = '', nextStep = '', scriptpoint = '', transferCode = '') {
   return {
     audio,
@@ -113,6 +142,179 @@ export function makeApiTemplate(config = {}) {
     source: 'template',
     templateType: 'api',
     metadata: { api },
+    actions,
+  });
+}
+
+export function makeRestApiTemplate(config = {}) {
+  const api = normalizeRestApiConfig({ ...DEFAULT_REST_API_CONFIG, ...config });
+  const returnId = 4;
+  const errorTargetId = api.enableErrorAlert ? 9 : returnId;
+  const actions = [
+    makeNiceAction({
+      actionId: 1,
+      action: 'BEGIN',
+      caption: api.scriptName,
+      parameters: ['', '', ''],
+      x: 128,
+      y: 64,
+      defaultNextAction: makeBranch(12),
+    }),
+    makeNiceAction({
+      actionId: 12,
+      action: 'WORKFLOWDATA',
+      caption: 'CHAVE APIs',
+      parameters: [api.workflowKey],
+      x: 128,
+      y: 160,
+      defaultNextAction: makeBranch(13),
+    }),
+    makeNiceAction({
+      actionId: 13,
+      action: 'SNIPPET',
+      caption: 'CHAVES_APIs',
+      parameters: [api.chavesSnippetOverride || makeApiKeysSnippet(api), 'Limit2K'],
+      x: 128,
+      y: 256,
+      defaultNextAction: makeBranch(14),
+    }),
+    makeNiceAction({
+      actionId: 14,
+      action: 'IF',
+      caption: 'BLOQ API LIGADO?',
+      parameters: [`${api.blockVariable} = "LIGADO"`],
+      x: 128,
+      y: 352,
+      branches: [makeBranch(15, 'True', 0), makeBranch(11, 'False', 1)],
+    }),
+    makeNiceAction({
+      actionId: 15,
+      action: 'SNIPPET',
+      caption: 'Dados RESPONSE - API Fechada',
+      parameters: [makeClosedApiSnippet(api), 'Limit2K'],
+      x: 392,
+      y: 352,
+      defaultNextAction: makeBranch(returnId),
+    }),
+    makeNiceAction({
+      actionId: 11,
+      action: 'SNIPPET',
+      caption: 'Criacao de parametros',
+      parameters: [api.initSnippetOverride || makeApiInitSnippet(api), 'Limit2K'],
+      x: 128,
+      y: 464,
+      defaultNextAction: makeBranch(3),
+    }),
+    makeNiceAction({
+      actionId: 3,
+      action: 'SNIPPET',
+      caption: 'Dados REQUEST',
+      parameters: [api.requestSnippetOverride || makeApiRequestSnippet(api), 'Limit2K'],
+      x: 128,
+      y: 576,
+      defaultNextAction: makeBranch(5),
+    }),
+    makeNiceAction({
+      actionId: 5,
+      action: 'REST_API',
+      caption: api.serviceName,
+      parameters: [
+        'MakeRestRequest',
+        '{url}',
+        api.headerJson,
+        api.method === 'GET' ? '' : api.bodyJson,
+        api.method,
+        api.timeout,
+        api.resultSetVar,
+        api.errorListVar,
+        api.responseHeadersVar,
+      ],
+      x: 392,
+      y: 576,
+      defaultNextAction: makeBranch(6),
+    }),
+    makeNiceAction({
+      actionId: 6,
+      action: 'SNIPPET',
+      caption: 'Dados RESPONSE',
+      parameters: [api.responseSnippetOverride || makeApiResponseSnippet(api), 'Limit2K'],
+      x: 656,
+      y: 576,
+      defaultNextAction: makeBranch(10),
+    }),
+    makeNiceAction({
+      actionId: 10,
+      action: 'SNIPPET',
+      caption: 'dados CDR',
+      parameters: [api.cdrSnippetOverride || makeApiCdrSnippet(api), 'Limit2K'],
+      x: 656,
+      y: 464,
+      defaultNextAction: makeBranch(8),
+    }),
+    makeNiceAction({
+      actionId: 8,
+      action: 'IF',
+      caption: 'Ret OK?',
+      parameters: [api.successExpression],
+      x: 656,
+      y: 352,
+      branches: [makeBranch(returnId, 'True', 0), makeBranch(7, 'False', 1)],
+    }),
+    makeNiceAction({
+      actionId: 7,
+      action: 'SNIPPET',
+      caption: 'Tratamento erro',
+      parameters: [api.errorSnippetOverride || makeApiErrorSnippet(), 'Limit2K'],
+      x: 920,
+      y: 352,
+      defaultNextAction: makeBranch(errorTargetId),
+    }),
+    ...(api.enableErrorAlert ? [makeNiceAction({
+      actionId: 9,
+      action: 'RUNSUB',
+      caption: 'Alerta erro API',
+      parameters: [
+        api.alertScriptPath,
+        '',
+        'RTN',
+        `{${api.serviceName}}`,
+        '{global:fluxo}',
+        '{global:contactID}',
+        '{global:msisdn}',
+        '{global:ani}',
+        '{Url}',
+        '{bodyjson}',
+        '{resultBody}',
+      ],
+      x: 920,
+      y: 464,
+      defaultNextAction: makeBranch(returnId),
+    })] : []),
+    makeNiceAction({
+      actionId: returnId,
+      action: 'RETURN',
+      caption: 'Default',
+      parameters: ['0'],
+      x: 656,
+      y: 224,
+      defaultNextAction: null,
+    }),
+    ...(api.annotationText ? [makeNiceAction({
+      actionId: 17,
+      action: 'ANNOTATION',
+      caption: 'Annotation',
+      parameters: [api.annotationText, '191', '116'],
+      x: 392,
+      y: 688,
+      defaultNextAction: null,
+    })] : []),
+  ];
+
+  return makeNiceScript({
+    name: api.scriptName,
+    source: 'template',
+    templateType: 'restApi',
+    metadata: { restApi: api },
     actions,
   });
 }
@@ -257,6 +459,38 @@ export function normalizeApiConfig(api) {
     ifExpression,
     trueDestination: normalizeApiDestination(api.trueDestination, DEFAULT_API_CONFIG.trueDestination),
     falseDestination: normalizeApiDestination(api.falseDestination, DEFAULT_API_CONFIG.falseDestination),
+  };
+}
+
+export function normalizeRestApiConfig(api) {
+  const outputVars = String(api.outputVarsText ?? '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const serviceName = normalizeServiceName(api.serviceName || api.scriptName || DEFAULT_REST_API_CONFIG.serviceName);
+  const blockProvider = api.blockProvider || DEFAULT_REST_API_CONFIG.blockProvider;
+
+  return {
+    ...api,
+    scriptName: api.scriptName || DEFAULT_REST_API_CONFIG.scriptName,
+    serviceName,
+    blockProvider,
+    blockVariable: blockVariableForProvider(blockProvider),
+    workflowKey: api.workflowKey || DEFAULT_REST_API_CONFIG.workflowKey,
+    method: String(api.method || DEFAULT_REST_API_CONFIG.method).toUpperCase(),
+    timeout: String(api.timeout || DEFAULT_REST_API_CONFIG.timeout),
+    headerJson: api.headerJson || DEFAULT_REST_API_CONFIG.headerJson,
+    bodyJson: api.bodyJson || DEFAULT_REST_API_CONFIG.bodyJson,
+    resultSetVar: api.resultSetVar || DEFAULT_REST_API_CONFIG.resultSetVar,
+    errorListVar: api.errorListVar || DEFAULT_REST_API_CONFIG.errorListVar,
+    responseHeadersVar: api.responseHeadersVar || DEFAULT_REST_API_CONFIG.responseHeadersVar,
+    outputVars,
+    outputVarsText: outputVars.join('\r\n'),
+    mainReturnVar: api.mainReturnVar || outputVars[0] || DEFAULT_REST_API_CONFIG.mainReturnVar,
+    closedReturnValue: api.closedReturnValue || DEFAULT_REST_API_CONFIG.closedReturnValue,
+    successExpression: api.successExpression || DEFAULT_REST_API_CONFIG.successExpression,
+    enableErrorAlert: api.enableErrorAlert !== false,
+    alertScriptPath: api.alertScriptPath || DEFAULT_REST_API_CONFIG.alertScriptPath,
   };
 }
 
@@ -537,6 +771,136 @@ function makeEntrySnippet(entry) {
     `ASSIGN mapa_dna="${entry.mapaDna}"`,
     `ASSIGN next_step="${entry.nextStep}"`,
   ].join('\r\n');
+}
+
+function makeApiKeysSnippet(api) {
+  return [
+    'IF test = 1',
+    '{',
+    `  DYNAMIC global:${api.workflowKey}`,
+    '}',
+    '',
+    '// Chaves Bloqueio API / 0 = Bloqueio Desligado - 1 = Bloqueio Ligado',
+    `ASSIGN bloqueioApisApigee = "{global:${api.workflowKey}.apigee}"`,
+    `ASSIGN bloqueioApisAws = "{global:${api.workflowKey}.aws}"`,
+    `ASSIGN bloqueioApisIntegrador = "{global:${api.workflowKey}.integrador}"`,
+    '',
+    `IF ${api.blockVariable} = "1"`,
+    '{',
+    `  ASSIGN ${api.blockVariable} = "LIGADO"`,
+    '}',
+    'ELSE',
+    '{',
+    `  ASSIGN ${api.blockVariable} = "DESLIGADO"`,
+    '}',
+  ].join('\r\n');
+}
+
+function makeClosedApiSnippet(api) {
+  const lines = api.outputVars.map((variable, index) => (
+    index === 0
+      ? `ASSIGN ${variable} = "${api.closedReturnValue}"`
+      : `ASSIGN ${variable} = ""`
+  ));
+  if (!lines.length) lines.push(`ASSIGN ${api.mainReturnVar} = "${api.closedReturnValue}"`);
+  return lines.join('\r\n');
+}
+
+function makeApiInitSnippet(api) {
+  const lines = api.outputVars.map((variable) => `ASSIGN ${variable} = ""`);
+  if (!lines.some((line) => line.includes(api.mainReturnVar))) lines.unshift(`ASSIGN ${api.mainReturnVar} = ""`);
+  lines.push('', 'ASSIGN STR_RETORNO = ""');
+  return lines.join('\r\n');
+}
+
+function makeApiRequestSnippet(api) {
+  const bodyBlock = api.method === 'GET'
+    ? ['ASSIGN bodyjson = ""']
+    : [
+      'DYNAMIC body',
+      '// ASSIGN body.campo = "{valor}"',
+      'ASSIGN bodyjson = "{body.asjson()}"',
+    ];
+
+  return [
+    'ASSIGN global:consulta_servico = "YES"',
+    '',
+    'DYNAMIC header',
+    'ASSIGN header.ContentType = "application/json"',
+    'ASSIGN header.Authorization = "{global:TOKENAPIGEE}"',
+    'ASSIGN headerjson = "{header.asjson()}"',
+    'ASSIGN headerjson = "{headerjson.replace(\'ContentType\', \'Content-Type\')}"',
+    '',
+    'IF global:env="DEV"',
+    '{',
+    `  ASSIGN url = "${api.urlDev}"`,
+    '}',
+    'ELSE',
+    '{',
+    `  ASSIGN url = "${api.urlPrd}"`,
+    '}',
+    '',
+    ...bodyBlock,
+    '',
+    `ASSIGN ${api.serviceName} = "${api.serviceName}"`,
+  ].join('\r\n');
+}
+
+function makeApiResponseSnippet(api) {
+  return [
+    'ASSIGN execTime_e = now',
+    '',
+    `IF ${api.resultSetVar}.dados.retorno[1] = "OK"`,
+    '{',
+    `  ASSIGN ${api.mainReturnVar} = "OK"`,
+    '}',
+    'ELSE',
+    '{',
+    `  ASSIGN ${api.mainReturnVar} = "NOK"`,
+    '}',
+    '',
+    `ASSIGN STR_RETORNO = "{${api.resultSetVar}.asjson()}"`,
+  ].join('\r\n');
+}
+
+function makeApiCdrSnippet(api) {
+  return [
+    'DYNAMIC bodyCdr',
+    `ASSIGN bodyCdr.nomeServico = "${api.serviceName}"`,
+    'ASSIGN bodyCdr.url = "{url}"',
+    'ASSIGN bodyCdr.request = "{bodyjson}"',
+    'ASSIGN bodyCdr.response = "{STR_RETORNO}"',
+    'ASSIGN bodyCdr.replyCode = "{_replycode}"',
+    'ASSIGN bodyCdr.execTimeInicio = "{execTime_i}"',
+    'ASSIGN bodyCdr.execTimeFim = "{execTime_e}"',
+  ].join('\r\n');
+}
+
+function makeApiErrorSnippet() {
+  return [
+    'IF _replycode = 1',
+    '{',
+    '  ASSIGN resultBody = "{resultSet.asjson()}"',
+    '}',
+    'ELSE',
+    '{',
+    '  ASSIGN resultBody = "{errorArgList.asjson()}"',
+    '}',
+  ].join('\r\n');
+}
+
+function blockVariableForProvider(provider) {
+  const normalized = String(provider || '').toLowerCase();
+  if (normalized === 'aws') return 'bloqueioApisAws';
+  if (normalized === 'apigee') return 'bloqueioApisApigee';
+  return 'bloqueioApisIntegrador';
+}
+
+function normalizeServiceName(value) {
+  return String(value || DEFAULT_REST_API_CONFIG.serviceName)
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[^A-Za-z0-9_:]/g, '') || DEFAULT_REST_API_CONFIG.serviceName;
 }
 
 function normalizeRetryAudios(audios = [], attempts, suffix) {
