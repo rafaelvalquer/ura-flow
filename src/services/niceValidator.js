@@ -63,6 +63,9 @@ function validateMenu(action, actions, errors, warnings) {
 }
 
 function validateCase(action, errors) {
+  if (!(action.cases ?? []).length) {
+    errors.push(`${action.caption}: CASE precisa de pelo menos um case configurado.`);
+  }
   if (!action.defaultNextAction || Number(action.defaultNextAction.actionId) === -1) {
     errors.push(`${action.caption}: CASE precisa de DefaultNextAction.`);
   }

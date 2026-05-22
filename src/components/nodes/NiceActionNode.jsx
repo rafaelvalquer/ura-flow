@@ -32,7 +32,7 @@ export default function NiceActionNode({ data, selected }) {
   const branchCount = (data.branches?.length ?? 0) + (data.cases?.length ?? 0) + (data.defaultNextAction ? 1 : 0);
 
   return (
-    <div className={`nice-action-node nice-action-${data.action?.toLowerCase()} ${selected ? 'is-selected' : ''}`}>
+    <div className={`nice-action-node nice-action-${data.action?.toLowerCase()} ${selected ? 'is-selected' : ''} ${data.isSimulated ? 'is-simulated' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <div className="nice-action-node-title">
         <Icon size={16} />

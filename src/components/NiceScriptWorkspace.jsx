@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Copy, FileCode2, FileInput, LayoutGrid, Menu, Milestone, Plus, Save, Trash2 } from 'lucide-react';
-import NiceScriptCanvas from './NiceScriptCanvas.jsx';
-import { cloneNiceScript } from '../services/niceScriptModel.js';
+import NiceScriptCanvas, { makeNiceEdgeId } from './NiceScriptCanvas.jsx';
+import { cloneNiceScript, getNextActionId, makeBranch, makeNiceAction, NICE_ACTION_LABELS } from '../services/niceScriptModel.js';
 import { exportNiceClipboard } from '../services/niceClipboardExporter.js';
 import {
   DEFAULT_API_CONFIG,
@@ -19,6 +19,70 @@ import { organizeNiceScript } from '../services/niceLayout.js';
 
 const DRAFT_STORAGE_KEY = 'ura-flow:nice-script:draft';
 const CLONES_STORAGE_KEY = 'ura-flow:nice-script:clones';
+const MANUAL_ACTION_TYPES = ['SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
+const SNIPPET_VARIABLES = ['NEXT_STEP', 'AUDIO', 'MRES', 'OP_ESCOLHIDA', 'scriptpoint', 'MAPA_DNA', '{pathStep}', '{pathAPI}', '{path_audio}'];
+const SNIPPET_BLOCKS = [
+  {
+    title: 'IF / ELSE',
+    description: 'Estrutura condicional padrao.',
+    code: 'IF NOME_VARIAVEL = "VALOR"\r\n{\r\n  \r\n}\r\nELSE\r\n{\r\n  \r\n}',
+  },
+  {
+    title: 'SWITCH OP_ESCOLHIDA',
+    description: 'Escolha por opcao digitada.',
+    code: 'SWITCH OP_ESCOLHIDA\r\n{\r\n  CASE "1"\r\n  {\r\n    \r\n  }\r\n}',
+  },
+  {
+    title: 'CASE "1"',
+    description: 'Novo bloco CASE.',
+    code: 'CASE "1"\r\n{\r\n  \r\n}',
+  },
+  {
+    title: 'ASSIGN variavel',
+    description: 'Atribuicao simples.',
+    code: 'ASSIGN NOME_VARIAVEL="VALOR"',
+  },
+  {
+    title: 'SET AUDIO + NEXT_STEP',
+    description: 'Parametros principais de saida.',
+    code: 'ASSIGN AUDIO="AUDIO.wav"\r\nASSIGN NEXT_STEP="{pathStep}Destino"\r\ninteractionLastDateTime=0',
+  },
+  {
+    title: 'SET scriptpoint + MAPA_DNA',
+    description: 'Rastreio de scriptpoint.',
+    code: 'ASSIGN scriptpoint=0\r\nASSIGN MAPA_DNA="{MAPA_DNA}|{scriptpoint}"',
+  },
+  {
+    title: 'SET TRANSFERCODE',
+    description: 'Codigo de transferencia.',
+    code: 'ASSIGN TRANSFERCODE="CODIGO.TRANSFER"',
+  },
+  {
+    title: 'KeyTrace',
+    description: 'Acumula opcao digitada.',
+    code: 'ASSIGN global:KeyTrace="{KeyTrace}{MRES}"',
+  },
+  {
+    title: 'Retorno API OK/ERRO',
+    description: 'Trata retorno de API.',
+    code: 'IF global:api_RET = "OK"\r\n{\r\n  ASSIGN NEXT_STEP="{pathStep}Sucesso"\r\n}\r\nELSE\r\n{\r\n  ASSIGN NEXT_STEP="{pathStep}Erro"\r\n}',
+  },
+  {
+    title: 'Saida Transfer',
+    description: 'Saida padrao para transferencia.',
+    code: 'ASSIGN scriptpoint=0\r\nASSIGN MAPA_DNA="{MAPA_DNA}|{scriptpoint}"\r\nASSIGN AUDIO="PME_Transfer_ATH.wav"\r\nASSIGN NEXT_STEP="{pathStep}transfer"\r\nASSIGN TRANSFERCODE="TRANSFER.CODE"\r\ninteractionLastDateTime=0',
+  },
+  {
+    title: 'Saida Tchau',
+    description: 'Saida padrao de encerramento.',
+    code: 'ASSIGN scriptpoint=0\r\nASSIGN MAPA_DNA="{MAPA_DNA}|{scriptpoint}"\r\nASSIGN AUDIO="PCI_Tchau.wav"\r\nASSIGN NEXT_STEP="{pathStep}Tchau"\r\ninteractionLastDateTime=0',
+  },
+  {
+    title: 'Menu opcao escolhida',
+    description: 'Normaliza resposta do menu.',
+    code: 'OP_ESCOLHIDA="{mres}"\r\nASSIGN global:KeyTrace="{KeyTrace}{MRES}"',
+  },
+];
 
 export default function NiceScriptWorkspace() {
   const [script, setScript] = useState(() => readStoredScript() ?? makeMenuTemplate());
@@ -29,9 +93,19 @@ export default function NiceScriptWorkspace() {
   const [importError, setImportError] = useState('');
   const [isMenuWizardOpen, setMenuWizardOpen] = useState(false);
   const [isApiWizardOpen, setApiWizardOpen] = useState(false);
+  const [manualActionType, setManualActionType] = useState('SNIPPET');
+  const [pendingConnection, setPendingConnection] = useState(null);
+  const [snippetStudioActionId, setSnippetStudioActionId] = useState(null);
+  const [niceMode, setNiceMode] = useState('builder');
+  const [simulationNodeOutputs, setSimulationNodeOutputs] = useState({});
   const fileInputRef = useRef(null);
   const validation = useMemo(() => validateNiceScript(script), [script]);
+  const simulation = useMemo(
+    () => simulateNiceFlow(script, { nodeOutputs: simulationNodeOutputs }),
+    [script, simulationNodeOutputs],
+  );
   const selectedAction = script.actions.find((action) => Number(action.actionId) === Number(selectedActionId));
+  const snippetStudioAction = script.actions.find((action) => Number(action.actionId) === Number(snippetStudioActionId));
 
   useEffect(() => {
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(script));
@@ -113,6 +187,11 @@ export default function NiceScriptWorkspace() {
     });
   }
 
+  function applySnippetStudioCode(actionId, code) {
+    updateParameter(actionId, 0, code);
+    setSnippetStudioActionId(null);
+  }
+
   function updateBranch(actionId, branchType, index, patch) {
     updateAction(actionId, (action) => {
       const key = branchType === 'case' ? 'cases' : 'branches';
@@ -128,6 +207,98 @@ export default function NiceScriptWorkspace() {
         ? { ...action.defaultNextAction, actionId: Number(value) || -1 }
         : { actionId: Number(value) || -1, index: 0, text: '', labelDistance: null, segments: [] },
     }));
+  }
+
+  function addManualAction(actionType = manualActionType, position = null) {
+    const actionId = getNextActionId(script.actions);
+    setScript((current) => {
+      const fallbackPosition = selectedAction
+        ? { x: Number(selectedAction.x) + 260, y: Number(selectedAction.y) }
+        : { x: 160, y: 160 };
+      const nextAction = makeDefaultAction(actionType, actionId, position ?? fallbackPosition);
+      return {
+        ...current,
+        actions: [...current.actions, nextAction],
+      };
+    });
+    setSelectedActionId(actionId);
+    setCopyStatus('');
+  }
+
+  function removeAction(actionId) {
+    setScript((current) => ({
+      ...current,
+      actions: current.actions.filter((action) => Number(action.actionId) !== Number(actionId)),
+    }));
+    setSelectedActionId(null);
+    setCopyStatus('');
+  }
+
+  function removeActionAndConnections(actionId) {
+    const removedId = Number(actionId);
+    setScript((current) => ({
+      ...current,
+      actions: current.actions
+        .filter((action) => Number(action.actionId) !== removedId)
+        .map((action) => ({
+          ...action,
+          defaultNextAction: Number(action.defaultNextAction?.actionId) === removedId ? null : action.defaultNextAction,
+          branches: (action.branches ?? []).filter((branch) => Number(branch.actionId) !== removedId),
+          cases: (action.cases ?? []).filter((branch) => Number(branch.actionId) !== removedId),
+        })),
+    }));
+    setSelectedActionId(null);
+    setCopyStatus('');
+  }
+
+  function handleConnectActions(connection) {
+    setPendingConnection(connection);
+  }
+
+  function applyConnection(config) {
+    const sourceId = Number(pendingConnection?.sourceId);
+    const targetId = Number(pendingConnection?.targetId);
+    if (!sourceId || !targetId) return;
+
+    setScript((current) => ({
+      ...current,
+      actions: current.actions.map((action) => {
+        if (Number(action.actionId) !== sourceId) return action;
+        const branch = makeBranch(targetId, config.label, config.index);
+        if (config.type === 'default') {
+          return { ...action, defaultNextAction: branch };
+        }
+        if (config.type === 'case') {
+          return { ...action, cases: upsertBranch(action.cases ?? [], branch) };
+        }
+        return { ...action, branches: upsertBranch(action.branches ?? [], branch) };
+      }),
+    }));
+    setPendingConnection(null);
+    setCopyStatus('');
+  }
+
+  function deleteConnection(edgeData) {
+    const sourceId = Number(edgeData?.actionId);
+    if (!sourceId) return;
+
+    setScript((current) => ({
+      ...current,
+      actions: current.actions.map((action) => {
+        if (Number(action.actionId) !== sourceId) return action;
+
+        if (edgeData.kind === 'default') {
+          return { ...action, defaultNextAction: null };
+        }
+
+        const key = edgeData.kind === 'case' ? 'cases' : 'branches';
+        return {
+          ...action,
+          [key]: (action[key] ?? []).filter((branch) => !sameBranch(branch, edgeData.branch)),
+        };
+      }),
+    }));
+    setCopyStatus('');
   }
 
   function updateMenuConfig(patch) {
@@ -179,6 +350,39 @@ export default function NiceScriptWorkspace() {
     setCopyStatus('');
   }
 
+  function clearCanvas() {
+    setScript((current) => ({
+      ...current,
+      name: 'Fluxo NICE em branco',
+      templateType: 'blank',
+      metadata: {
+        ...current.metadata,
+        menu: undefined,
+        entry: undefined,
+        api: undefined,
+      },
+      actions: [],
+    }));
+    setSelectedActionId(null);
+    setCopyText('');
+    setCopyStatus('');
+    setImportError('');
+  }
+
+  function resetSimulation() {
+    setSimulationNodeOutputs({});
+  }
+
+  function updateSimulationNodeOutput(actionId, patch) {
+    setSimulationNodeOutputs((current) => ({
+      ...current,
+      [actionId]: {
+        ...(current[actionId] ?? {}),
+        ...patch,
+      },
+    }));
+  }
+
   async function copyToNice() {
     const output = exportNiceClipboard(script);
     setCopyText(output);
@@ -199,30 +403,90 @@ export default function NiceScriptWorkspace() {
           <p>{script.name} - {script.actions.length} actions</p>
         </div>
         <div className="toolbar-context">
-          <button className="ghost-button" type="button" onClick={() => setMenuWizardOpen(true)}>
-            <Menu size={16} />
-            Novo menu
-          </button>
-          <button className="ghost-button" type="button" onClick={() => loadScript(makeEntryTemplate())}>
-            <FileCode2 size={16} />
-            Novo entry
-          </button>
-          <button className="ghost-button" type="button" onClick={() => setApiWizardOpen(true)}>
-            <Milestone size={16} />
-            Nova API
-          </button>
-          <button className="ghost-button" type="button" onClick={handleOrganizeScript} disabled={!script.actions.length}>
-            <LayoutGrid size={16} />
-            Organizar
-          </button>
-          <button className="secondary-button" type="button" onClick={copyToNice} disabled={!validation.isValid}>
-            <ClipboardCopy size={16} />
-            Copiar para NICE
-          </button>
+          <div className="nice-mode-toggle" role="group" aria-label="Modo Script NICE">
+            <button
+              className={niceMode === 'builder' ? 'is-active' : ''}
+              type="button"
+              onClick={() => setNiceMode('builder')}
+            >
+              Builder
+            </button>
+            <button
+              className={niceMode === 'simulator' ? 'is-active' : ''}
+              type="button"
+              onClick={() => setNiceMode('simulator')}
+            >
+              Simulador
+            </button>
+          </div>
+          {niceMode === 'builder' ? (
+            <>
+              <label className="nice-toolbar-add">
+                <select value={manualActionType} onChange={(event) => setManualActionType(event.target.value)}>
+                  {MANUAL_ACTION_TYPES.map((type) => (
+                    <option value={type} key={type}>{type}</option>
+                  ))}
+                </select>
+                <button className="ghost-button" type="button" onClick={() => addManualAction(manualActionType)}>
+                  <Plus size={16} />
+                  Adicionar action
+                </button>
+              </label>
+              <button className="ghost-button" type="button" onClick={handleOrganizeScript} disabled={!script.actions.length}>
+                <LayoutGrid size={16} />
+                Organizar
+              </button>
+              <button className="ghost-button" type="button" onClick={clearCanvas} disabled={!script.actions.length}>
+                <Trash2 size={16} />
+                Limpar canvas
+              </button>
+              <button className="secondary-button" type="button" onClick={copyToNice} disabled={!validation.isValid}>
+                <ClipboardCopy size={16} />
+                Copiar para NICE
+              </button>
+            </>
+          ) : (
+            <button className="ghost-button" type="button" onClick={resetSimulation}>
+              Resetar teste
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="nice-workspace-grid">
+      {niceMode === 'simulator' ? (
+        <div className="nice-simulator-grid">
+          <aside className="nice-simulator-left">
+            <NiceSimulatorPanel
+              script={script}
+              simulation={simulation}
+              onReset={resetSimulation}
+            />
+            <SimulationNodeInspector
+              action={selectedAction}
+              actions={script.actions}
+              variables={simulation.variables}
+              nodeOutput={simulationNodeOutputs[selectedActionId] ?? {}}
+              onNodeOutputChange={(patch) => updateSimulationNodeOutput(selectedActionId, patch)}
+            />
+          </aside>
+
+          <NiceScriptCanvas
+            script={script}
+            selectedActionId={selectedActionId}
+            simulation={simulation}
+            readOnly
+            onSelectAction={setSelectedActionId}
+            onClearSelection={() => setSelectedActionId(null)}
+          />
+
+          <aside className="nice-simulator-right">
+            <SimulationVariablesPanel variables={simulation.variables} warnings={simulation.warnings} />
+            <SimulationTimeline simulation={simulation} />
+            <ValidationPanel validation={validation} />
+          </aside>
+        </div>
+      ) : (
+        <div className="nice-workspace-grid">
         <aside className="nice-left-panel">
           <section className="panel-section nice-panel">
             <div className="section-header">
@@ -260,6 +524,8 @@ export default function NiceScriptWorkspace() {
             {importError && <div className="nice-alert is-error">{importError}</div>}
           </section>
 
+          <ActionPalette onAddAction={(type) => addManualAction(type)} />
+
           <section className="panel-section nice-panel">
             <div className="section-header">
               <h2>Templates clonados</h2>
@@ -290,9 +556,14 @@ export default function NiceScriptWorkspace() {
         <NiceScriptCanvas
           script={script}
           selectedActionId={selectedActionId}
+          simulation={null}
           onSelectAction={setSelectedActionId}
           onClearSelection={() => setSelectedActionId(null)}
           onMoveAction={updateActionPosition}
+          onConnectActions={handleConnectActions}
+          onDropAction={addManualAction}
+          onDeleteConnection={deleteConnection}
+          onDeleteAction={removeActionAndConnections}
         />
 
         <aside className="nice-right-panel">
@@ -315,6 +586,8 @@ export default function NiceScriptWorkspace() {
             onParameterChange={updateParameter}
             onBranchChange={updateBranch}
             onDefaultChange={updateDefault}
+            onRemove={removeAction}
+            onOpenSnippetStudio={setSnippetStudioActionId}
           />
           <section className="panel-section nice-panel">
             <div className="section-header">
@@ -327,7 +600,8 @@ export default function NiceScriptWorkspace() {
             {copyText && <textarea className="nice-output-preview" readOnly value={copyText} />}
           </section>
         </aside>
-      </div>
+        </div>
+      )}
       {isMenuWizardOpen && (
         <NiceMenuWizard
           initialConfig={script.templateType === 'menu' ? script.metadata?.menu : DEFAULT_MENU_CONFIG}
@@ -340,6 +614,22 @@ export default function NiceScriptWorkspace() {
           initialConfig={script.templateType === 'api' ? script.metadata?.api : DEFAULT_API_CONFIG}
           onCancel={() => setApiWizardOpen(false)}
           onCreate={handleCreateApiFromWizard}
+        />
+      )}
+      {pendingConnection && (
+        <ConnectionModal
+          connection={pendingConnection}
+          sourceAction={script.actions.find((action) => Number(action.actionId) === Number(pendingConnection.sourceId))}
+          targetAction={script.actions.find((action) => Number(action.actionId) === Number(pendingConnection.targetId))}
+          onCancel={() => setPendingConnection(null)}
+          onApply={applyConnection}
+        />
+      )}
+      {snippetStudioAction?.action === 'SNIPPET' && (
+        <SnippetStudio
+          action={snippetStudioAction}
+          onCancel={() => setSnippetStudioActionId(null)}
+          onApply={applySnippetStudioCode}
         />
       )}
     </>
@@ -644,6 +934,188 @@ function NiceApiWizard({ initialConfig, onCancel, onCreate }) {
   );
 }
 
+function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onApply }) {
+  const connectionOptions = useMemo(() => getAvailableConnectionOptions(sourceAction), [sourceAction]);
+  const [selectedKey, setSelectedKey] = useState(connectionOptions[0]?.key ?? '');
+  const selectedOption = connectionOptions.find((option) => option.key === selectedKey) ?? connectionOptions[0] ?? null;
+  const [caseValue, setCaseValue] = useState(selectedOption?.label ?? '');
+  const [caseIndex, setCaseIndex] = useState(selectedOption?.index ?? 0);
+
+  function selectOption(key) {
+    const option = connectionOptions.find((item) => item.key === key);
+    setSelectedKey(key);
+    if (option) {
+      setCaseValue(option.label);
+      setCaseIndex(option.index);
+    }
+  }
+
+  function applySelectedConnection() {
+    if (!selectedOption) return;
+    onApply({
+      type: selectedOption.type,
+      label: selectedOption.editable ? caseValue : selectedOption.label,
+      index: selectedOption.editable ? caseIndex : selectedOption.index,
+    });
+  }
+
+  return (
+    <div className="nice-wizard-backdrop" role="presentation">
+      <section className="nice-connection-modal" role="dialog" aria-modal="true" aria-label="Configurar conexao NICE">
+        <header className="nice-wizard-header">
+          <div>
+            <h2>Configurar conexao</h2>
+            <p>#{connection.sourceId} {sourceAction?.caption} {'->'} #{connection.targetId} {targetAction?.caption}</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={onCancel}>Fechar</button>
+        </header>
+        <div className="nice-wizard-body">
+          {connectionOptions.length ? (
+            <>
+              <SelectField
+                label="Tipo de saida"
+                value={selectedOption?.key}
+                onChange={selectOption}
+                options={connectionOptions.map((option) => ({
+                  value: option.key,
+                  label: option.selectLabel,
+                }))}
+              />
+              {selectedOption?.editable ? (
+                <div className="nice-form-grid">
+                  <Field label="Valor do case" value={caseValue} onChange={setCaseValue} />
+                  <Field label="Index" value={caseIndex} onChange={setCaseIndex} />
+                </div>
+              ) : (
+                <div className="nice-selected-output">
+                  <strong>{selectedOption?.selectLabel}</strong>
+                  <small>{selectedOption?.description}</small>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="nice-alert is-warning">
+              Esse node nao possui saidas livres para nova conexao. Edite ou remova uma conexao existente no painel da action.
+            </div>
+          )}
+        </div>
+        <footer className="nice-wizard-footer">
+          <button className="ghost-button" type="button" onClick={onCancel}>Cancelar</button>
+          <button className="secondary-button" type="button" onClick={applySelectedConnection} disabled={!selectedOption}>Aplicar conexao</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function SnippetStudio({ action, onCancel, onApply }) {
+  const textareaRef = useRef(null);
+  const [code, setCode] = useState(action.parameters?.[0] ?? '');
+  const warnings = useMemo(() => validateNiceSnippetCode(code), [code]);
+
+  function insertBlock(block) {
+    insertAtCursor(textareaRef, code, block.code, setCode);
+  }
+
+  return (
+    <div className="nice-wizard-backdrop" role="presentation">
+      <section className="nice-snippet-studio" role="dialog" aria-modal="true" aria-label="Snippet Studio NICE">
+        <header className="nice-wizard-header">
+          <div>
+            <h2>Snippet Studio</h2>
+            <p>Action #{action.actionId} - {action.caption}</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={onCancel}>Fechar</button>
+        </header>
+
+        <div className="nice-snippet-studio-body">
+          <aside className="nice-snippet-library">
+            <div className="section-header">
+              <h2>Blocos prontos</h2>
+            </div>
+            <div className="nice-snippet-variable-list" aria-label="Variaveis comuns">
+              {SNIPPET_VARIABLES.map((variable) => (
+                <button type="button" key={variable} onClick={() => insertBlock({ code: variable })}>
+                  {variable}
+                </button>
+              ))}
+            </div>
+            <div className="nice-snippet-block-list">
+              {SNIPPET_BLOCKS.map((block) => (
+                <button type="button" key={block.title} onClick={() => insertBlock(block)}>
+                  <strong>{block.title}</strong>
+                  <small>{block.description}</small>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <main className="nice-snippet-editor-shell">
+            <label className="nice-field nice-snippet-editor-field">
+              <span>Snippet code</span>
+              <textarea ref={textareaRef} value={code} onChange={(event) => setCode(event.target.value)} spellCheck={false} />
+            </label>
+          </main>
+
+          <aside className="nice-snippet-validation">
+            <div className="section-header">
+              <h2>Validacao</h2>
+            </div>
+            {warnings.length ? (
+              <div className="nice-validation-list">
+                {warnings.map((warning, index) => (
+                  <div className="nice-alert is-warning" key={`${warning}-${index}`}>{warning}</div>
+                ))}
+              </div>
+            ) : (
+              <p className="nice-empty-text">Nenhum aviso no snippet.</p>
+            )}
+          </aside>
+        </div>
+
+        <footer className="nice-wizard-footer">
+          <button className="ghost-button" type="button" onClick={onCancel}>Cancelar</button>
+          <div className="toolbar-context">
+            <button className="ghost-button" type="button" onClick={() => setCode(formatNiceSnippet(code))}>Formatar</button>
+            <button className="secondary-button" type="button" onClick={() => onApply(action.actionId, code)}>Aplicar no node</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ActionPalette({ onAddAction }) {
+  function handleDragStart(event, type) {
+    event.dataTransfer.setData('application/nice-action', type);
+    event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  return (
+    <section className="panel-section nice-panel">
+      <div className="section-header">
+        <h2>Paleta de actions</h2>
+      </div>
+      <div className="nice-action-palette">
+        {MANUAL_ACTION_TYPES.map((type) => (
+          <button
+            className="nice-palette-item"
+            draggable
+            type="button"
+            key={type}
+            onClick={() => onAddAction(type)}
+            onDragStart={(event) => handleDragStart(event, type)}
+            title={`Arraste para o canvas ou clique para adicionar ${type}`}
+          >
+            <strong>{type}</strong>
+            <small>{NICE_ACTION_LABELS[type] ?? type}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ValidationPanel({ validation }) {
   return (
     <section className="panel-section nice-panel">
@@ -667,47 +1139,336 @@ function ValidationPanel({ validation }) {
   );
 }
 
-function MenuConfigPanel({ menu, onChange, onOptionChange, onAddOption, onRemoveOption }) {
+function NiceSimulatorPanel({ script, simulation, onReset }) {
+  const lastStep = simulation.steps.at(-1);
+
   return (
     <section className="panel-section nice-panel">
       <div className="section-header">
+        <h2>Cenario de teste</h2>
+        <span className="selected-pill">{simulation.actionIds.length} nodes</span>
+      </div>
+      <p className="nice-empty-text">
+        Clique em cada node no canvas para escolher a saida simulada: MRES no MENU, retorno no RUNSUB, True/False no IF.
+      </p>
+      <button className="ghost-button full-width-button" type="button" onClick={onReset}>
+        Resetar teste
+      </button>
+      {lastStep && (
+        <div className="simulation-node-summary">
+          <strong>Ultimo node: #{lastStep.actionId} {lastStep.caption}</strong>
+          <small>{lastStep.branchLabel || 'sem saida configurada'}</small>
+        </div>
+      )}
+      {simulation.reason && <div className="nice-alert is-warning">{simulation.reason}</div>}
+      {script.actions.length === 0 && <div className="nice-alert is-warning">Canvas vazio. Volte ao Builder para montar um fluxo.</div>}
+    </section>
+  );
+}
+
+function SimulationNodeInspector({
+  action,
+  actions,
+  variables,
+  nodeOutput,
+  onNodeOutputChange,
+}) {
+  if (!action) {
+    return (
+      <section className="panel-section nice-panel">
+        <div className="section-header">
+          <h2>Node selecionado</h2>
+        </div>
+        <p className="nice-empty-text">Selecione um node no canvas para configurar a saida dele durante o teste.</p>
+      </section>
+    );
+  }
+
+  const actionType = action.action;
+  const responseVariable = action.parameters?.[7] || 'MRES';
+  const menuOptions = getMenuMaskOptions(actions);
+  const rawMenuOutputValue = nodeOutput.value ?? nodeOutput.customValue ?? '';
+  const menuOutputValue = String(rawMenuOutputValue);
+  const menuSelectionValue = nodeOutput.mode === 'timeout'
+    ? '__timeout__'
+    : nodeOutput.mode === 'custom' || (menuOutputValue && !menuOptions.includes(menuOutputValue))
+      ? '__custom__'
+      : nodeOutput.mode === 'value'
+        ? menuOutputValue
+        : '__initial__';
+  const menuCustomValue = nodeOutput.customValue ?? (
+    menuSelectionValue === '__custom__' ? menuOutputValue : variables[responseVariable] ?? variables.MRES ?? ''
+  );
+  const assignments = actionType === 'SNIPPET'
+    ? extractSnippetAssignments(action.parameters?.[0] ?? '')
+    : actionType === 'ASSIGN'
+      ? extractAssignAction(action)
+      : [];
+
+  return (
+    <section className="panel-section nice-panel">
+      <div className="section-header">
+        <h2>Node selecionado</h2>
+        <span className="selected-pill">#{action.actionId} {actionType}</span>
+      </div>
+      <div className="simulation-node-summary">
+        <strong>{action.caption}</strong>
+        <small>{NICE_ACTION_LABELS[actionType] ?? actionType}</small>
+      </div>
+
+      {actionType === 'MENU' && (
+        <>
+          <SelectField
+            label={`Saida ${responseVariable}`}
+            value={menuSelectionValue}
+            onChange={(value) => {
+              if (value === '__initial__') {
+                onNodeOutputChange({ type: 'menu', mode: 'initial', value: '', customValue: '' });
+                return;
+              }
+              if (value === '__timeout__') {
+                onNodeOutputChange({ type: 'menu', mode: 'timeout', value: '', customValue: '' });
+                return;
+              }
+              if (value === '__custom__') {
+                const customValue = menuCustomValue || variables[responseVariable] || variables.MRES || '';
+                onNodeOutputChange({ type: 'menu', mode: 'custom', value: customValue, customValue });
+                return;
+              }
+              onNodeOutputChange({ type: 'menu', mode: 'value', value });
+            }}
+            options={[
+              { value: '__initial__', label: `Usar valor atual de ${responseVariable} (${variables[responseVariable] ?? variables.MRES ?? 'vazio'})` },
+              ...menuOptions.map((option) => ({ value: option, label: `${responseVariable}=${option}` })),
+              { value: '__custom__', label: 'Valor customizado / invalido' },
+              { value: '__timeout__', label: 'Timeout' },
+            ]}
+          />
+          {menuSelectionValue === '__custom__' && (
+            <Field
+              label={`${responseVariable} customizado`}
+              value={menuCustomValue}
+              onChange={(value) => {
+                onNodeOutputChange({ type: 'menu', mode: 'custom', value, customValue: value });
+              }}
+            />
+          )}
+          <p className="nice-empty-text">Mascara detectada: {menuOptions.join('-') || 'nenhuma'}</p>
+        </>
+      )}
+
+      {actionType === 'IF' && (
+        <SelectField
+          label="Resultado do IF"
+          value={nodeOutput.branch ?? 'True'}
+          onChange={(value) => onNodeOutputChange({ type: 'if', branch: value })}
+          options={[
+            { value: 'True', label: 'True' },
+            { value: 'False', label: 'False / Else' },
+          ]}
+        />
+      )}
+
+      {actionType === 'CASE' && (
+        <SelectField
+          label="Case escolhido"
+          value={nodeOutput.value ?? variables.MRES ?? '__default__'}
+          onChange={(value) => {
+            onNodeOutputChange({ type: 'case', value });
+          }}
+          options={[
+            ...(action.cases ?? []).map((item) => ({ value: item.text, label: `CASE "${item.text}"` })),
+            { value: '__default__', label: 'Default' },
+          ]}
+        />
+      )}
+
+      {actionType === 'LOCATE' && (
+        <SelectField
+          label="Resultado do LOCATE"
+          value={nodeOutput.branch ?? 'auto'}
+          onChange={(value) => onNodeOutputChange({ type: 'locate', branch: value })}
+          options={[
+            { value: 'auto', label: `Automatico por MRES=${variables.MRES ?? ''}` },
+            { value: 'Found', label: 'Found' },
+            { value: 'Default', label: 'Default' },
+          ]}
+        />
+      )}
+
+      {actionType === 'LOOP' && (
+        <SelectField
+          label="Resultado do LOOP"
+          value={nodeOutput.branch ?? 'Finished'}
+          onChange={(value) => onNodeOutputChange({ type: 'loop', branch: value })}
+          options={[
+            { value: 'Finished', label: 'Finished' },
+            { value: 'Repeat', label: 'Repeat' },
+          ]}
+        />
+      )}
+
+      {actionType === 'RUNSUB' && (
+        <div className="nice-form-grid">
+          <Field
+            label="Variavel retorno"
+            value={nodeOutput.returnVariable ?? 'api_RET'}
+            onChange={(value) => onNodeOutputChange({ type: 'runsub', returnVariable: value })}
+          />
+          <Field
+            label="Valor retorno"
+            value={nodeOutput.returnValue ?? variables[nodeOutput.returnVariable || 'api_RET'] ?? ''}
+            onChange={(value) => {
+              const variableName = nodeOutput.returnVariable || 'api_RET';
+              onNodeOutputChange({ type: 'runsub', returnVariable: variableName, returnValue: value });
+            }}
+          />
+        </div>
+      )}
+
+      {(actionType === 'SNIPPET' || actionType === 'ASSIGN') && (
+        <div className="simulation-assignment-list">
+          <strong>Variaveis detectadas</strong>
+          {assignments.length === 0 ? (
+            <p className="nice-empty-text">Nenhum ASSIGN simples detectado.</p>
+          ) : assignments.map((item, index) => (
+            <div className="simulation-assignment-row" key={`${item.name}-${index}`}>
+              <span>{item.name}</span>
+              <code>{item.value}</code>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {actionType === 'PLAY' && (
+        <div className="nice-alert is-warning">Audio/prompt: {action.parameters?.[0] || 'nao preenchido'}</div>
+      )}
+
+      {actionType === 'RUNSCRIPT' && (
+        <div className="nice-alert is-warning">Destino final: {action.parameters?.[0] || 'NEXT_STEP vazio'}</div>
+      )}
+    </section>
+  );
+}
+
+function SimulationVariablesPanel({ variables, warnings }) {
+  const entries = Object.entries(variables ?? {}).sort(([left], [right]) => left.localeCompare(right));
+
+  return (
+    <section className="panel-section nice-panel">
+      <div className="section-header">
+        <h2>Variaveis simuladas</h2>
+        <span className="selected-pill">{entries.length}</span>
+      </div>
+      {entries.length === 0 ? (
+        <p className="nice-empty-text">Nenhuma variavel definida no teste.</p>
+      ) : (
+        <div className="simulation-variable-table">
+          {entries.map(([name, value]) => (
+            <div className="simulation-variable-row" key={name}>
+              <span>{name}</span>
+              <code>{String(value)}</code>
+            </div>
+          ))}
+        </div>
+      )}
+      {(warnings ?? []).map((message, index) => (
+        <div className="nice-alert is-warning" key={`sim-warning-${index}`}>{message}</div>
+      ))}
+    </section>
+  );
+}
+
+function SimulationTimeline({ simulation }) {
+  return (
+    <section className="panel-section nice-panel">
+      <div className="section-header">
+        <h2>Timeline</h2>
+        <span className="selected-pill">{simulation.steps.length}</span>
+      </div>
+      {simulation.steps.length === 0 ? (
+        <p className="nice-empty-text">Nenhum caminho executado.</p>
+      ) : (
+        <div className="simulation-timeline">
+          {simulation.steps.map((step, index) => (
+            <article className="simulation-timeline-item" key={`${step.actionId}-${index}`}>
+              <div>
+                <strong>#{step.actionId} {step.caption}</strong>
+                <small>{step.action} - {step.branchLabel || 'sem saida'}</small>
+              </div>
+              {step.changes.length > 0 && (
+                <div className="simulation-step-changes">
+                  {step.changes.map((change) => (
+                    <code key={`${change.name}-${change.value}`}>{change.name}={change.value}</code>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+      {simulation.reason && <div className="nice-alert is-warning">{simulation.reason}</div>}
+      {simulation.actionIds.length > 0 && (
+        <div className="nice-simulation-path">
+          {simulation.actionIds.map((actionId) => (
+            <span key={actionId}>#{actionId}</span>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MenuConfigPanel({ menu, onChange, onOptionChange, onAddOption, onRemoveOption }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <section className={`panel-section nice-panel nice-accordion-panel ${isOpen ? 'is-open' : ''}`}>
+      <div className="section-header">
         <h2>Config menu</h2>
-      </div>
-      <Field label="Nome" value={menu.scriptName} onChange={(value) => onChange({ scriptName: value })} />
-      <Field label="Variavel resposta" value={menu.responseVariable} onChange={(value) => onChange({ responseVariable: value })} />
-      <div className="nice-form-grid">
-        <Field label="Prefixo audio" value={menu.audioPathVar} onChange={(value) => onChange({ audioPathVar: value })} />
-        <Field label="Prefixo step" value={menu.pathStepVar} onChange={(value) => onChange({ pathStepVar: value })} />
-      </div>
-      <Field label="Audio INI" value={menu.noteIni} onChange={(value) => onChange({ noteIni: value })} />
-      <div className="nice-form-grid">
-        <Field label="Timeout" value={menu.timeout} onChange={(value) => onChange({ timeout: value })} />
-        <Field label="Interdigit" value={menu.interDigitTimeout} onChange={(value) => onChange({ interDigitTimeout: value })} />
-      </div>
-      <RetryConfig title="REJ" enabled={menu.hasRej} attempts={menu.rejAttempts} audios={menu.rejRetryAudios} exit={menu.rejExit} onChange={(patch) => onChange(renameRetryPatch('rej', patch))} />
-      <RetryConfig title="SIL" enabled={menu.hasSil} attempts={menu.silAttempts} audios={menu.silRetryAudios} exit={menu.silExit} onChange={(patch) => onChange(renameRetryPatch('sil', patch))} />
-      <div className="nice-options-header">
-        <strong>Opcoes</strong>
-        <button className="icon-button" type="button" onClick={onAddOption} title="Adicionar opcao">
-          <Plus size={15} />
+        <button className="ghost-button nice-accordion-toggle" type="button" onClick={() => setIsOpen((current) => !current)}>
+          {isOpen ? 'Recolher' : 'Expandir'}
         </button>
       </div>
-      <div className="nice-option-list">
-        {menu.options.map((option, index) => (
-          <article className="nice-option-card" key={`${option.key}-${index}`}>
-            <div className="nice-option-title">
-              <Field label="Tecla" value={option.key} onChange={(value) => onOptionChange(index, { key: value })} />
-              <button className="icon-button" type="button" onClick={() => onRemoveOption(index)} title="Remover opcao">
-                <Trash2 size={14} />
-              </button>
-            </div>
-            <Field label="Audio saida" value={option.audio} onChange={(value) => onOptionChange(index, { audio: value })} />
-            <Field label="NEXT_STEP" value={option.nextStep} onChange={(value) => onOptionChange(index, { nextStep: value })} />
-            <Field label="scriptpoint" value={option.scriptpoint} onChange={(value) => onOptionChange(index, { scriptpoint: value })} />
-            <Field label="TransferCode" value={option.transferCode} onChange={(value) => onOptionChange(index, { transferCode: value })} />
-          </article>
-        ))}
-      </div>
+      {isOpen && (
+        <div className="nice-accordion-content">
+          <Field label="Nome" value={menu.scriptName} onChange={(value) => onChange({ scriptName: value })} />
+          <Field label="Variavel resposta" value={menu.responseVariable} onChange={(value) => onChange({ responseVariable: value })} />
+          <div className="nice-form-grid">
+            <Field label="Prefixo audio" value={menu.audioPathVar} onChange={(value) => onChange({ audioPathVar: value })} />
+            <Field label="Prefixo step" value={menu.pathStepVar} onChange={(value) => onChange({ pathStepVar: value })} />
+          </div>
+          <Field label="Audio INI" value={menu.noteIni} onChange={(value) => onChange({ noteIni: value })} />
+          <div className="nice-form-grid">
+            <Field label="Timeout" value={menu.timeout} onChange={(value) => onChange({ timeout: value })} />
+            <Field label="Interdigit" value={menu.interDigitTimeout} onChange={(value) => onChange({ interDigitTimeout: value })} />
+          </div>
+          <RetryConfig title="REJ" enabled={menu.hasRej} attempts={menu.rejAttempts} audios={menu.rejRetryAudios} exit={menu.rejExit} onChange={(patch) => onChange(renameRetryPatch('rej', patch))} />
+          <RetryConfig title="SIL" enabled={menu.hasSil} attempts={menu.silAttempts} audios={menu.silRetryAudios} exit={menu.silExit} onChange={(patch) => onChange(renameRetryPatch('sil', patch))} />
+          <div className="nice-options-header">
+            <strong>Opcoes</strong>
+            <button className="icon-button" type="button" onClick={onAddOption} title="Adicionar opcao">
+              <Plus size={15} />
+            </button>
+          </div>
+          <div className="nice-option-list">
+            {menu.options.map((option, index) => (
+              <article className="nice-option-card" key={`${option.key}-${index}`}>
+                <div className="nice-option-title">
+                  <Field label="Tecla" value={option.key} onChange={(value) => onOptionChange(index, { key: value })} />
+                  <button className="icon-button" type="button" onClick={() => onRemoveOption(index)} title="Remover opcao">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <Field label="Audio saida" value={option.audio} onChange={(value) => onOptionChange(index, { audio: value })} />
+                <Field label="NEXT_STEP" value={option.nextStep} onChange={(value) => onOptionChange(index, { nextStep: value })} />
+                <Field label="scriptpoint" value={option.scriptpoint} onChange={(value) => onOptionChange(index, { scriptpoint: value })} />
+                <Field label="TransferCode" value={option.transferCode} onChange={(value) => onOptionChange(index, { transferCode: value })} />
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -787,7 +1548,7 @@ function EntryConfigPanel({ entry, onChange }) {
   );
 }
 
-function ActionEditor({ action, onChange, onParameterChange, onBranchChange, onDefaultChange }) {
+function ActionEditor({ action, onChange, onParameterChange, onBranchChange, onDefaultChange, onRemove, onOpenSnippetStudio }) {
   if (!action) {
     return (
       <section className="panel-section nice-panel">
@@ -805,33 +1566,134 @@ function ActionEditor({ action, onChange, onParameterChange, onBranchChange, onD
       <Field label="Caption" value={action.caption} onChange={(value) => onChange(action.actionId, () => ({ caption: value }))} />
       <Field label="Default ActionID" value={action.defaultNextAction?.actionId ?? ''} onChange={(value) => onDefaultChange(action.actionId, value)} />
 
-      <div className="nice-editor-block">
-        <strong>Parametros</strong>
-        {action.action === 'SNIPPET' ? (
-          <>
-            <label className="nice-field">
-              <span>Snippet code</span>
-              <textarea value={action.parameters?.[0] ?? ''} onChange={(event) => onParameterChange(action.actionId, 0, event.target.value)} />
-            </label>
-            <Field label="Max string" value={action.parameters?.[1] ?? 'Limit2K'} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
-          </>
-        ) : (
-          <div className="nice-parameter-list">
-            {(action.parameters ?? []).map((parameter, index) => (
-              <Field
-                key={`${action.actionId}-param-${index}`}
-                label={`Parametro ${index + 1}`}
-                value={parameter}
-                onChange={(value) => onParameterChange(action.actionId, index, value)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {action.action === 'MENU' && <MenuActionEditor action={action} onParameterChange={onParameterChange} />}
+      {action.action === 'RUNSUB' && <RunsubActionEditor action={action} onParameterChange={onParameterChange} onChange={onChange} />}
+      {action.action === 'PLAY' && <PlayActionEditor action={action} onParameterChange={onParameterChange} />}
+      {action.action === 'IF' && <IfActionEditor action={action} onParameterChange={onParameterChange} />}
+      {action.action === 'LOOP' && <LoopActionEditor action={action} onParameterChange={onParameterChange} />}
+      {!['MENU', 'RUNSUB', 'PLAY', 'IF', 'LOOP'].includes(action.action) && (
+        <GenericParameterEditor action={action} onParameterChange={onParameterChange} onOpenSnippetStudio={onOpenSnippetStudio} />
+      )}
 
       <BranchEditor title="Branches" items={action.branches} type="branch" actionId={action.actionId} onChange={onBranchChange} />
       <BranchEditor title="Cases" items={action.cases} type="case" actionId={action.actionId} onChange={onBranchChange} />
+      <button className="danger-button nice-remove-action" type="button" onClick={() => onRemove(action.actionId)}>
+        <Trash2 size={15} />
+        Remover action
+      </button>
     </section>
+  );
+}
+
+function MenuActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>MENU</strong>
+      <Field label="Prompt/menu audio" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+      <div className="nice-form-grid">
+        <Field label="Interruptible" value={action.parameters?.[2] ?? ''} onChange={(value) => onParameterChange(action.actionId, 2, value)} />
+        <Field label="Min digits" value={action.parameters?.[3] ?? ''} onChange={(value) => onParameterChange(action.actionId, 3, value)} />
+        <Field label="Timeout" value={action.parameters?.[5] ?? ''} onChange={(value) => onParameterChange(action.actionId, 5, value)} />
+        <Field label="Interdigit" value={action.parameters?.[6] ?? ''} onChange={(value) => onParameterChange(action.actionId, 6, value)} />
+      </div>
+      <Field label="Variavel resposta" value={action.parameters?.[7] ?? ''} onChange={(value) => onParameterChange(action.actionId, 7, value)} />
+    </div>
+  );
+}
+
+function RunsubActionEditor({ action, onParameterChange, onChange }) {
+  const params = action.parameters ?? [];
+  const extraParams = params.slice(3).join('\n');
+
+  return (
+    <div className="nice-editor-block">
+      <strong>RUNSUB</strong>
+      <Field label="Script/API" value={params[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+      <div className="nice-form-grid">
+        <Field label="Destino retorno" value={params[1] ?? ''} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
+        <Field label="Tipo retorno" value={params[2] ?? ''} onChange={(value) => onParameterChange(action.actionId, 2, value)} />
+      </div>
+      <TextareaField
+        label="Parametros enviados (um por linha)"
+        value={extraParams}
+        onChange={(value) => {
+          const nextParams = value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+          onChange(action.actionId, (current) => ({
+            parameters: [
+              current.parameters?.[0] ?? '',
+              current.parameters?.[1] ?? '',
+              current.parameters?.[2] ?? 'RTN',
+              ...nextParams,
+            ],
+          }));
+        }}
+      />
+    </div>
+  );
+}
+
+function PlayActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>PLAY</strong>
+      <Field label="Prompt/audio" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+      <div className="nice-form-grid">
+        <Field label="Interruptible" value={action.parameters?.[2] ?? ''} onChange={(value) => onParameterChange(action.actionId, 2, value)} />
+        <Field label="Clear digits" value={action.parameters?.[3] ?? ''} onChange={(value) => onParameterChange(action.actionId, 3, value)} />
+      </div>
+    </div>
+  );
+}
+
+function IfActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>IF</strong>
+      <TextareaField label="Expressao" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+    </div>
+  );
+}
+
+function LoopActionEditor({ action, onParameterChange }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>LOOP</strong>
+      <div className="nice-form-grid">
+        <Field label="Quantidade max" value={action.parameters?.[0] ?? ''} onChange={(value) => onParameterChange(action.actionId, 0, value)} />
+        <Field label="Contador" value={action.parameters?.[1] ?? ''} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
+      </div>
+    </div>
+  );
+}
+
+function GenericParameterEditor({ action, onParameterChange, onOpenSnippetStudio }) {
+  return (
+    <div className="nice-editor-block">
+      <strong>Parametros</strong>
+      {action.action === 'SNIPPET' ? (
+        <>
+          <label className="nice-field">
+            <span>Snippet code</span>
+            <textarea value={action.parameters?.[0] ?? ''} onChange={(event) => onParameterChange(action.actionId, 0, event.target.value)} />
+          </label>
+          <button className="secondary-button nice-snippet-studio-open" type="button" onClick={() => onOpenSnippetStudio(action.actionId)}>
+            Abrir Snippet Studio
+          </button>
+          <Field label="Max string" value={action.parameters?.[1] ?? 'Limit2K'} onChange={(value) => onParameterChange(action.actionId, 1, value)} />
+        </>
+      ) : (
+        <div className="nice-parameter-list">
+          {(action.parameters ?? []).map((parameter, index) => (
+            <Field
+              key={`${action.actionId}-param-${index}`}
+              label={`Parametro ${index + 1}`}
+              value={parameter}
+              onChange={(value) => onParameterChange(action.actionId, index, value)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -957,4 +1819,523 @@ function readClonedTemplates() {
   } catch {
     return [];
   }
+}
+
+function makeDefaultAction(actionType, actionId, position = {}) {
+  const base = {
+    actionId,
+    action: actionType,
+    caption: defaultActionCaption(actionType),
+    x: Math.round(position.x ?? 160),
+    y: Math.round(position.y ?? 160),
+  };
+
+  if (actionType === 'SNIPPET') {
+    return makeNiceAction({ ...base, parameters: ['', 'Limit2K'] });
+  }
+  if (actionType === 'PLAY') {
+    return makeNiceAction({ ...base, parameters: ['""', '', 'True', 'False', '', '', '', ''] });
+  }
+  if (actionType === 'RUNSCRIPT') {
+    return makeNiceAction({ ...base, caption: 'next__step', parameters: [''] });
+  }
+  if (actionType === 'RUNSUB') {
+    return makeNiceAction({ ...base, caption: 'Ws_ChamadaApi', parameters: ['', '', 'RTN'] });
+  }
+  if (actionType === 'IF') {
+    return makeNiceAction({
+      ...base,
+      caption: 'If',
+      parameters: [''],
+      branches: [makeBranch(-1, 'True', 0), makeBranch(-1, 'False', 1)],
+    });
+  }
+  if (actionType === 'LOOP') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Loop',
+      parameters: ['', ''],
+      branches: [makeBranch(-1, 'Finished', 0), makeBranch(-1, 'Repeat', 1)],
+    });
+  }
+  if (actionType === 'MENU') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Menu',
+      parameters: ['{NOTEMENU}', '', 'True', '1', '', '5', '5', 'MRES'],
+      defaultNextAction: makeBranch(-1),
+      branches: [makeBranch(-1, 'Timeout', 2)],
+    });
+  }
+  if (actionType === 'LOCATE') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Op esta na Mascara?',
+      parameters: ['{MASCARA}', '{MRES}', 'OP_ESCOLHIDA', 'False'],
+      defaultNextAction: makeBranch(-1),
+      branches: [makeBranch(-1, 'Found', 0)],
+    });
+  }
+  if (actionType === 'CASE') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Case',
+      parameters: ['{MRES}'],
+      defaultNextAction: makeBranch(-1),
+      cases: [makeBranch(-1, '1', 0)],
+    });
+  }
+  if (actionType === 'ASSIGN') {
+    return makeNiceAction({
+      ...base,
+      caption: 'Assign',
+      parameters: ['', '', 'String', '', 'False', 'False', 'Limit2K'],
+    });
+  }
+
+  return makeNiceAction({ ...base, parameters: [] });
+}
+
+function defaultActionCaption(actionType) {
+  return NICE_ACTION_LABELS[actionType] ?? actionType;
+}
+
+function upsertBranch(items, branch) {
+  const branchText = String(branch.text ?? '').toLowerCase();
+  const index = items.findIndex((item) => (
+    Number(item.index) === Number(branch.index)
+    || (branchText && String(item.text ?? '').toLowerCase() === branchText)
+  ));
+
+  if (index === -1) return [...items, branch];
+  const nextItems = [...items];
+  nextItems[index] = { ...nextItems[index], ...branch };
+  return nextItems;
+}
+
+function sameBranch(left, right) {
+  return Number(left?.actionId) === Number(right?.actionId)
+    && Number(left?.index) === Number(right?.index)
+    && String(left?.text ?? '') === String(right?.text ?? '');
+}
+
+function getAvailableConnectionOptions(sourceAction) {
+  if (!sourceAction) return [];
+
+  if (sourceAction.action === 'IF') {
+    return [
+      makeBranchOption(sourceAction, 'True', 0, 'Branch True', 'Caminho executado quando o IF for verdadeiro.'),
+      makeBranchOption(sourceAction, 'False', 1, 'Branch False', 'Caminho executado quando o IF for falso.'),
+    ].filter(Boolean);
+  }
+
+  if (sourceAction.action === 'LOOP') {
+    return [
+      makeBranchOption(sourceAction, 'Finished', 0, 'Branch Finished', 'Caminho quando o limite do loop for atingido.'),
+      makeBranchOption(sourceAction, 'Repeat', 1, 'Branch Repeat', 'Caminho para repetir o loop.'),
+    ].filter(Boolean);
+  }
+
+  if (sourceAction.action === 'MENU') {
+    return [
+      makeDefaultOption(sourceAction, 'DefaultNextAction', 'Caminho quando o cliente digita uma opcao.'),
+      makeBranchOption(sourceAction, 'Timeout', 2, 'Branch Timeout', 'Caminho quando nao ha digitacao dentro do timeout.'),
+    ].filter(Boolean);
+  }
+
+  if (sourceAction.action === 'LOCATE') {
+    return [
+      makeBranchOption(sourceAction, 'Found', 0, 'Branch Found', 'Caminho quando o valor foi encontrado na mascara.'),
+      makeDefaultOption(sourceAction, 'DefaultNextAction', 'Caminho quando o valor nao foi encontrado.'),
+    ].filter(Boolean);
+  }
+
+  if (sourceAction.action === 'CASE') {
+    const nextCase = nextCaseValue(sourceAction.cases ?? []);
+    return [
+      makeDefaultOption(sourceAction, 'DefaultNextAction', 'Caminho padrao quando nenhum case casar.'),
+      {
+        key: `case-${nextCase}`,
+        type: 'case',
+        label: nextCase,
+        index: nextCaseIndex(sourceAction.cases ?? []),
+        selectLabel: 'Novo Case',
+        description: 'Cria uma nova opcao de CASE com valor editavel.',
+        editable: true,
+      },
+    ].filter(Boolean);
+  }
+
+  if (['RUNSCRIPT'].includes(sourceAction.action)) {
+    return [];
+  }
+
+  return [
+    makeDefaultOption(sourceAction, 'DefaultNextAction', 'Caminho padrao da action.'),
+  ].filter(Boolean);
+}
+
+function makeDefaultOption(action, selectLabel, description) {
+  if (isConnected(action.defaultNextAction)) return null;
+  return {
+    key: 'default',
+    type: 'default',
+    label: '',
+    index: 0,
+    selectLabel,
+    description,
+    editable: false,
+  };
+}
+
+function makeBranchOption(action, label, index, selectLabel, description) {
+  const existing = (action.branches ?? []).find((branch) => (
+    String(branch.text ?? '').toLowerCase() === String(label).toLowerCase()
+    || Number(branch.index) === Number(index)
+  ));
+  if (isConnected(existing)) return null;
+  return {
+    key: `branch-${label.toLowerCase()}`,
+    type: 'branch',
+    label,
+    index,
+    selectLabel,
+    description,
+    editable: false,
+  };
+}
+
+function isConnected(branch) {
+  return Number(branch?.actionId) > 0;
+}
+
+function nextCaseValue(cases) {
+  const usedNumbers = new Set(
+    cases
+      .map((item) => Number(item.text))
+      .filter((value) => Number.isFinite(value) && value > 0),
+  );
+  let value = 1;
+  while (usedNumbers.has(value)) value += 1;
+  return String(value);
+}
+
+function nextCaseIndex(cases) {
+  return Math.max(-1, ...cases.map((item) => Number(item.index) || 0)) + 1;
+}
+
+function insertAtCursor(textareaRef, currentCode, blockCode, setCode) {
+  const textarea = textareaRef.current;
+  const separator = currentCode && !currentCode.endsWith('\n') ? '\r\n' : '';
+
+  if (!textarea) {
+    setCode(`${currentCode}${separator}${blockCode}`);
+    return;
+  }
+
+  const start = textarea.selectionStart ?? currentCode.length;
+  const end = textarea.selectionEnd ?? currentCode.length;
+  const before = currentCode.slice(0, start);
+  const after = currentCode.slice(end);
+  const prefix = before && !before.endsWith('\n') ? '\r\n' : '';
+  const suffix = after && !blockCode.endsWith('\n') ? '\r\n' : '';
+  const nextCode = `${before}${prefix}${blockCode}${suffix}${after}`;
+  const nextCursor = before.length + prefix.length + blockCode.length;
+
+  setCode(nextCode);
+  window.requestAnimationFrame(() => {
+    textarea.focus();
+    textarea.setSelectionRange(nextCursor, nextCursor);
+  });
+}
+
+function formatNiceSnippet(code) {
+  let indent = 0;
+  return String(code ?? '')
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      if (trimmed.startsWith('}')) indent = Math.max(0, indent - 1);
+      const formatted = `${'  '.repeat(indent)}${trimmed}`;
+      if (trimmed.endsWith('{')) indent += 1;
+      return formatted;
+    })
+    .join('\r\n');
+}
+
+function validateNiceSnippetCode(code) {
+  const warnings = [];
+  const text = String(code ?? '');
+  if (!text.trim()) return warnings;
+
+  const openBraces = (text.match(/\{/g) ?? []).length;
+  const closeBraces = (text.match(/\}/g) ?? []).length;
+  if (openBraces !== closeBraces) warnings.push(`Chaves desbalanceadas: ${openBraces} abertura(s) e ${closeBraces} fechamento(s).`);
+
+  if (/scriptpoint/i.test(text) && !/MAPA_DNA/i.test(text)) {
+    warnings.push('scriptpoint usado sem atualizar MAPA_DNA.');
+  }
+  if (/MAPA_DNA/i.test(text) && !/scriptpoint/i.test(text)) {
+    warnings.push('MAPA_DNA usado sem scriptpoint.');
+  }
+
+  for (const match of text.matchAll(/ASSIGN\s+(?:global:)?AUDIO\s*=\s*"([^"]+)"/gi)) {
+    const audio = match[1];
+    if (audio && !audio.includes('{') && !/\.wav$/i.test(audio)) {
+      warnings.push(`AUDIO "${audio}" nao termina em .wav.`);
+    }
+  }
+
+  const looksLikeOutput = /AUDIO|TRANSFERCODE|scriptpoint|MAPA_DNA/i.test(text);
+  if (looksLikeOutput && !/NEXT_STEP/i.test(text)) {
+    warnings.push('Snippet parece ser de saida, mas nao define NEXT_STEP.');
+  }
+
+  if (/\bIF\b/i.test(text) && !/IF[^{]*\{/i.test(text)) {
+    warnings.push('Existe IF sem bloco { } logo apos a condicao.');
+  }
+
+  if (/\bSWITCH\b/i.test(text) && !/\bCASE\b/i.test(text)) {
+    warnings.push('Existe SWITCH sem CASE.');
+  }
+
+  return warnings;
+}
+
+function simulateNiceFlow(script, context = {}) {
+  const actions = script?.actions ?? [];
+  if (!actions.length) {
+    return {
+      actionIds: [],
+      edgeIds: [],
+      reason: 'Canvas vazio para simular.',
+      steps: [],
+      variables: { ...(context.variables ?? {}) },
+      warnings: [],
+    };
+  }
+
+  const actionsById = new Map(actions.map((action) => [Number(action.actionId), action]));
+  const root = actions.find((action) => action.action === 'BEGIN') ?? actions[0];
+  const variables = { ...(context.variables ?? {}) };
+  const nodeOutputs = context.nodeOutputs ?? {};
+  const actionIds = [];
+  const edgeIds = [];
+  const steps = [];
+  const warnings = [];
+  const visited = new Set();
+  let current = root;
+  let reason = '';
+
+  while (current && !visited.has(Number(current.actionId)) && actionIds.length < 80) {
+    const currentId = Number(current.actionId);
+    visited.add(currentId);
+    actionIds.push(currentId);
+
+    const nodeOutput = nodeOutputs[currentId] ?? {};
+    const changes = applyNodeSimulationOutput(current, variables, nodeOutput);
+    const next = chooseSimulationNext(current, actions, variables, nodeOutput);
+    getNodeSimulationWarnings(current, variables, nodeOutput).forEach((message) => pushSimulationWarning(warnings, message));
+    if (next?.warning) pushSimulationWarning(warnings, next.warning);
+    steps.push({
+      actionId: currentId,
+      action: current.action,
+      caption: current.caption,
+      branchLabel: next?.label ?? '',
+      changes,
+    });
+
+    if (!next?.branch || Number(next.branch.actionId) <= 0) {
+      if (next?.reason) reason = next.reason;
+      break;
+    }
+
+    const target = actionsById.get(Number(next.branch.actionId));
+    if (!target) {
+      reason = `${current.caption}: destino #${next.branch.actionId} nao existe.`;
+      break;
+    }
+
+    edgeIds.push(makeNiceEdgeId(current.actionId, next.branch.actionId, next.label, next.branch.index));
+    current = target;
+  }
+
+  if (current && visited.has(Number(current.actionId)) && !reason) {
+    reason = `Simulacao parou para evitar loop no node #${current.actionId}.`;
+  }
+
+  if (!variables.NEXT_STEP && steps.some((step) => step.action === 'RUNSCRIPT')) {
+    warnings.push('RUNSCRIPT encontrado, mas NEXT_STEP simulado esta vazio.');
+  }
+
+  return { actionIds, edgeIds, reason, steps, variables, warnings };
+}
+
+function chooseSimulationNext(action, actions, variables, nodeOutput = {}) {
+  if (action.action === 'IF') {
+    const wanted = String(nodeOutput.branch || 'True').toLowerCase();
+    const branch = (action.branches ?? []).find((item) => normalizeBranchText(item.text) === wanted);
+    return branch ? edgeChoice(branch, branch.text || capitalize(wanted)) : { reason: `${action.caption}: branch ${nodeOutput.branch || 'True'} nao configurada.` };
+  }
+
+  if (action.action === 'MENU') {
+    const isTimeout = nodeOutput.mode === 'timeout';
+    const branch = isTimeout
+      ? (action.branches ?? []).find((item) => /timeout/i.test(item.text))
+      : action.defaultNextAction;
+    const label = isTimeout ? (branch?.text || 'Timeout') : 'Default';
+    return branch ? edgeChoice(branch, label) : { reason: `${action.caption}: saida de MENU nao configurada.` };
+  }
+
+  if (action.action === 'LOCATE') {
+    const mask = findMenuMask(actions);
+    const responseValue = variables.MRES ?? variables.mres ?? '';
+    const forced = nodeOutput.branch && nodeOutput.branch !== 'auto' ? nodeOutput.branch : '';
+    const found = forced
+      ? forced === 'Found'
+      : Boolean(responseValue) && mask.includes(String(responseValue));
+    const branch = found
+      ? (action.branches ?? []).find((item) => /found/i.test(item.text))
+      : action.defaultNextAction;
+    let warning = '';
+    if (!forced && !responseValue) {
+      warning = `${action.caption}: MRES ainda nao foi definido; LOCATE seguira Default.`;
+    } else if (!found && responseValue && mask.length > 0) {
+      warning = `${action.caption}: MRES "${responseValue}" nao esta na mascara ${mask.join('-')}.`;
+    }
+    return branch ? edgeChoice(branch, found ? (branch.text || 'Found') : 'Default', warning) : { reason: `${action.caption}: saida de LOCATE nao configurada.`, warning };
+  }
+
+  if (action.action === 'CASE') {
+    const value = String(nodeOutput.value && nodeOutput.value !== '__default__' ? nodeOutput.value : variables.MRES ?? '').trim();
+    const caseBranch = (action.cases ?? []).find((item) => String(item.text).trim() === value);
+    if (caseBranch) return edgeChoice(caseBranch, caseBranch.text || 'Case');
+    const warning = value ? '' : `${action.caption}: MRES ainda nao foi definido; CASE seguira Default.`;
+    return action.defaultNextAction
+      ? edgeChoice(action.defaultNextAction, 'Default', warning)
+      : { reason: `${action.caption}: CASE sem opcao ${value || '(vazia)'} e sem default.`, warning };
+  }
+
+  if (action.action === 'LOOP') {
+    const wanted = nodeOutput.branch || 'Finished';
+    const branch = (action.branches ?? []).find((item) => normalizeBranchText(item.text) === wanted.toLowerCase()) ?? action.branches?.[0];
+    return branch ? edgeChoice(branch, branch.text || wanted) : { reason: `${action.caption}: LOOP sem branch para simular.` };
+  }
+
+  if (action.action === 'RUNSUB') {
+    return action.defaultNextAction
+      ? edgeChoice(action.defaultNextAction, 'Default')
+      : { reason: `${action.caption}: RUNSUB finalizou sem proxima action.` };
+  }
+
+  if (action.defaultNextAction) return edgeChoice(action.defaultNextAction, 'Default');
+  return { reason: `${action.caption}: fim do caminho simulado.` };
+}
+
+function applyNodeSimulationOutput(action, variables, nodeOutput = {}) {
+  if (action.action === 'MENU') {
+    const responseVariable = action.parameters?.[7] || 'MRES';
+    if (nodeOutput.mode === 'timeout') {
+      variables[responseVariable] = '';
+      return [{ name: responseVariable, value: '' }];
+    }
+    const value = nodeOutput.mode === 'custom'
+      ? nodeOutput.customValue ?? nodeOutput.value ?? ''
+      : nodeOutput.mode === 'value'
+        ? nodeOutput.value ?? ''
+        : variables[responseVariable] ?? variables.MRES ?? '';
+    variables[responseVariable] = value;
+    return [{ name: responseVariable, value }];
+  }
+
+  if (action.action === 'RUNSUB') {
+    const name = nodeOutput.returnVariable || 'api_RET';
+    const value = nodeOutput.returnValue ?? variables[name] ?? '';
+    variables[name] = value;
+    return [{ name, value }];
+  }
+
+  if (action.action === 'SNIPPET') {
+    return applyAssignments(variables, extractSnippetAssignments(action.parameters?.[0] ?? ''));
+  }
+
+  if (action.action === 'ASSIGN') {
+    return applyAssignments(variables, extractAssignAction(action));
+  }
+
+  return [];
+}
+
+function applyAssignments(variables, assignments) {
+  return assignments.map((assignment) => {
+    variables[assignment.name] = assignment.value;
+    return assignment;
+  });
+}
+
+function getNodeSimulationWarnings(action, variables, nodeOutput = {}) {
+  if (action.action === 'RUNSUB') {
+    const name = nodeOutput.returnVariable || 'api_RET';
+    const value = variables[name] ?? '';
+    if (!value) return [`${action.caption}: retorno ${name} ainda nao foi preenchido no node.`];
+  }
+  return [];
+}
+
+function pushSimulationWarning(warnings, message) {
+  if (message && !warnings.includes(message)) warnings.push(message);
+}
+
+function edgeChoice(branch, label, warning = '') {
+  return { branch, label, warning };
+}
+
+function findMenuMask(actions) {
+  const configCode = actions.find((action) => action.caption === 'CONFIG_MENU')?.parameters?.[0] ?? '';
+  const mask = configCode.match(/ASSIGN\s+MASCARA\s*=\s*"([^"]+)"/i)?.[1] ?? '';
+  return mask.split('-').map((item) => item.trim()).filter(Boolean);
+}
+
+function getMenuMaskOptions(actions) {
+  const mask = findMenuMask(actions);
+  if (mask.length > 0) return mask;
+  const caseOptions = actions
+    .flatMap((action) => action.cases ?? [])
+    .map((item) => String(item.text ?? '').trim())
+    .filter(Boolean);
+  return [...new Set(caseOptions.length > 0 ? caseOptions : ['1', '2'])];
+}
+
+function extractSnippetAssignments(code) {
+  const assignments = [];
+  const pattern = /^\s*ASSIGN\s+([A-Za-z_][\w:]*|global:[A-Za-z_][\w:]*)\s*=\s*(.+?)\s*$/gim;
+  for (const match of code.matchAll(pattern)) {
+    assignments.push({
+      name: match[1],
+      value: cleanSimulationValue(match[2]),
+    });
+  }
+  return assignments;
+}
+
+function extractAssignAction(action) {
+  const name = action.parameters?.[0];
+  if (!name) return [];
+  return [{
+    name,
+    value: cleanSimulationValue(action.parameters?.[1] ?? ''),
+  }];
+}
+
+function cleanSimulationValue(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^"|"$/g, '');
+}
+
+function normalizeBranchText(text) {
+  const normalized = String(text || '').toLowerCase();
+  if (normalized === 'else') return 'false';
+  return normalized;
 }
