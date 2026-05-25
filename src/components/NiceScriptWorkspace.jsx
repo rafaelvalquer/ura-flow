@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Copy, Download, FileCode2, FileInput, FileText, LayoutGrid, Menu, Milestone, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, Braces, CheckCircle2, ClipboardCopy, Code2, Copy, CornerDownRight, Database, Download, FileCode2, FileInput, FileText, GitBranch, Globe2, KeyRound, LayoutGrid, LocateFixed, LogOut, Menu, MessageSquare, Milestone, MousePointerClick, PencilLine, Play, Plus, Repeat2, Save, Split, Trash2, Volume2, Workflow } from 'lucide-react';
 import NiceScriptCanvas, { makeNiceEdgeId } from './NiceScriptCanvas.jsx';
 import NiceDocumentationD3Flowchart from './NiceDocumentationD3Flowchart.jsx';
 import NiceDocumentationFlowCanvas from './NiceDocumentationFlowCanvas.jsx';
@@ -31,6 +31,55 @@ const DRAFT_STORAGE_KEY = 'ura-flow:nice-script:draft';
 const CLONES_STORAGE_KEY = 'ura-flow:nice-script:clones';
 const SNIPPET_THEME_STORAGE_KEY = 'ura-flow:nice-script:snippet-theme';
 const MANUAL_ACTION_TYPES = ['BEGIN', 'SNIPPET', 'PLAY', 'RUNSCRIPT', 'RUNSUB', 'REST_API', 'WORKFLOWDATA', 'RETURN', 'ANNOTATION', 'IF', 'LOOP', 'MENU', 'LOCATE', 'CASE', 'ASSIGN'];
+const ACTION_PALETTE_GROUPS = [
+  {
+    key: 'entry',
+    title: 'Entrada',
+    accent: '#f59e0b',
+    actions: ['BEGIN', 'MENU', 'PLAY'],
+  },
+  {
+    key: 'routing',
+    title: 'Roteamento',
+    accent: '#0ea5e9',
+    actions: ['LOCATE', 'CASE', 'IF', 'LOOP'],
+  },
+  {
+    key: 'logic',
+    title: 'Logica',
+    accent: '#8b5cf6',
+    actions: ['SNIPPET', 'ASSIGN', 'ANNOTATION'],
+  },
+  {
+    key: 'integration',
+    title: 'Integracoes',
+    accent: '#06b6d4',
+    actions: ['RUNSUB', 'REST_API', 'WORKFLOWDATA'],
+  },
+  {
+    key: 'output',
+    title: 'Saidas',
+    accent: '#64748b',
+    actions: ['RUNSCRIPT', 'RETURN'],
+  },
+];
+const ACTION_PALETTE_META = {
+  BEGIN: { icon: Play, description: 'Inicio do script e variaveis de entrada.' },
+  MENU: { icon: Menu, description: 'Coleta DTMF, audio e timeout.' },
+  PLAY: { icon: Volume2, description: 'Executa audio ou prompt.' },
+  LOCATE: { icon: LocateFixed, description: 'Valida resposta dentro da mascara.' },
+  CASE: { icon: Split, description: 'Roteia por opcao ou valor.' },
+  IF: { icon: GitBranch, description: 'Regra com saidas True e False.' },
+  LOOP: { icon: Repeat2, description: 'Controle de repeticao, SIL ou REJ.' },
+  SNIPPET: { icon: Code2, description: 'Logica customizada NICE.' },
+  ASSIGN: { icon: PencilLine, description: 'Atribuicao simples de variavel.' },
+  ANNOTATION: { icon: MessageSquare, description: 'Nota visual no fluxo.' },
+  RUNSUB: { icon: Workflow, description: 'Chama subscript/API e recebe retorno.' },
+  REST_API: { icon: Globe2, description: 'Chamada HTTP com request/response.' },
+  WORKFLOWDATA: { icon: KeyRound, description: 'Busca chaves e configuracoes.' },
+  RUNSCRIPT: { icon: CornerDownRight, description: 'Envia para proximo fluxo/script.' },
+  RETURN: { icon: LogOut, description: 'Finaliza retorno do script.' },
+};
 const SNIPPET_VARIABLES = ['NEXT_STEP', 'AUDIO', 'MRES', 'OP_ESCOLHIDA', 'scriptpoint', 'MAPA_DNA', '{pathStep}', '{pathAPI}', '{path_audio}'];
 const SNIPPET_BLOCKS = [
   {
@@ -1470,6 +1519,15 @@ function SnippetStudio({ action, onCancel, onApply }) {
 }
 
 function ActionPalette({ onAddAction }) {
+  const [openGroups, setOpenGroups] = useState(() => ({ entry: true }));
+
+  function toggleGroup(groupKey) {
+    setOpenGroups((current) => ({
+      ...current,
+      [groupKey]: !current[groupKey],
+    }));
+  }
+
   function handleDragStart(event, type) {
     event.dataTransfer.setData('application/nice-action', type);
     event.dataTransfer.effectAllowed = 'copy';
@@ -1481,19 +1539,49 @@ function ActionPalette({ onAddAction }) {
         <h2>Paleta de actions</h2>
       </div>
       <div className="nice-action-palette">
-        {MANUAL_ACTION_TYPES.map((type) => (
-          <button
-            className="nice-palette-item"
-            draggable
-            type="button"
-            key={type}
-            onClick={() => onAddAction(type)}
-            onDragStart={(event) => handleDragStart(event, type)}
-            title={`Arraste para o canvas ou clique para adicionar ${type}`}
-          >
-            <strong>{type}</strong>
-            <small>{NICE_ACTION_LABELS[type] ?? type}</small>
-          </button>
+        {ACTION_PALETTE_GROUPS.map((group) => (
+          <div className="nice-action-palette-group" key={group.key}>
+            <button
+              className="nice-action-palette-title"
+              type="button"
+              style={{ '--accent': group.accent }}
+              aria-expanded={Boolean(openGroups[group.key])}
+              onClick={() => toggleGroup(group.key)}
+            >
+              <span>{group.title}</span>
+              <small>{group.actions.length}</small>
+            </button>
+            {openGroups[group.key] && (
+              <div className="nice-action-palette-items">
+                {group.actions.map((type) => {
+                  const meta = ACTION_PALETTE_META[type] ?? {};
+                  const Icon = meta.icon ?? Braces;
+                  return (
+                    <button
+                      className="nice-palette-item"
+                      draggable
+                      type="button"
+                      key={type}
+                      data-group={group.key}
+                      style={{ '--accent': group.accent }}
+                      onClick={() => onAddAction(type)}
+                      onDragStart={(event) => handleDragStart(event, type)}
+                      title={`Arraste para o canvas ou clique para adicionar ${type}`}
+                    >
+                      <span className="nice-palette-icon" aria-hidden="true">
+                        <Icon size={16} />
+                      </span>
+                      <span className="nice-palette-copy">
+                        <strong>{NICE_ACTION_LABELS[type] ?? type}</strong>
+                        <small>{meta.description ?? type}</small>
+                      </span>
+                      <span className="nice-palette-code">{type}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </section>

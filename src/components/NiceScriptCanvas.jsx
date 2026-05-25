@@ -253,10 +253,18 @@ function makeNiceEdges(script, simulatedEdgeIds) {
 function makeEdge(action, branch, label, className, kind, simulatedEdgeIds) {
   const id = makeNiceEdgeId(action.actionId, branch.actionId, label, branch.index);
   const isSimulated = simulatedEdgeIds.has(id);
+  const sourceHandle = kind === 'case'
+    ? makeCaseHandleId(branch, label)
+    : kind === 'branch' && action.action === 'IF'
+      ? makeIfHandleId(branch, label)
+    : kind === 'default' && action.action === 'CASE'
+      ? makeDefaultCaseHandleId()
+      : undefined;
   return {
     id,
     source: String(action.actionId),
     target: String(branch.actionId),
+    sourceHandle,
     label,
     type: isSimulated ? 'animatedSvgEdge' : undefined,
     animated: isSimulated,
@@ -272,6 +280,27 @@ function makeEdge(action, branch, label, className, kind, simulatedEdgeIds) {
 
 export function makeNiceEdgeId(actionId, targetId, label, index) {
   return `nice-edge-${actionId}-${targetId}-${label}-${index}`;
+}
+
+function makeCaseHandleId(branch, label = '') {
+  return `case-${safeHandlePart(branch?.index ?? 0)}-${safeHandlePart(branch?.text || label || 'case')}`;
+}
+
+function makeDefaultCaseHandleId() {
+  return 'case-default';
+}
+
+function makeIfHandleId(branch, label = '') {
+  const text = `${branch?.text ?? ''} ${label}`.toLowerCase();
+  return /false/.test(text) || Number(branch?.index) === 1 ? 'if-false' : 'if-true';
+}
+
+function safeHandlePart(value) {
+  return String(value ?? 'item')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'item';
 }
 
 function AnimatedSvgEdge({

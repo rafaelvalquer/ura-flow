@@ -174,7 +174,7 @@ function buildMermaidJourney(script) {
     nodes.set(routerNode.id, routerNode);
     addEdge(edges, menuNode.id, routerNode.id, 'Roteia');
 
-    collectMenuOptions(actions, actionsById, range).forEach((option, index) => {
+    collectMenuOptions(actions, actionsById, range, menu).forEach((option, index) => {
       const optionNode = makeJourneyNode({
         id: `option_${menu.actionId}_${safeId(option.key)}_${index}`,
         kind: 'option',
@@ -541,9 +541,10 @@ function collectApiAttentionNodes(actions, nodes, edges) {
   });
 }
 
-function collectMenuOptions(actions, actionsById, range) {
+function collectMenuOptions(actions, actionsById, range, menu) {
   const caseOptions = [];
   const switchOptions = [];
+  const menuRoutingVariables = getMenuRoutingVariables(actions, range, menu);
 
   actions
     .filter((action) => action.action === 'CASE' && actionInRange(Number(action.actionId), range))
@@ -564,6 +565,7 @@ function collectMenuOptions(actions, actionsById, range) {
     .filter((action) => action.action === 'SNIPPET' && actionInRange(Number(action.actionId), range))
     .forEach((action) => {
       extractSnippetSwitchCases(action.parameters?.[0] ?? '').forEach((item) => {
+        if (!isMenuRoutingSwitch(item.switchValue, menuRoutingVariables)) return;
         switchOptions.push({
           key: item.caseValue,
           actionId: Number(action.actionId),
@@ -767,6 +769,44 @@ function actionInRange(actionId, range) {
 
 function normalizeOptionKey(value) {
   return String(value ?? '').trim().toUpperCase();
+}
+
+function getMenuRoutingVariables(actions, range, menu) {
+  const variables = new Set(['MRES', 'OP_ESCOLHIDA']);
+  const responseVariable = normalizeVariableName(menu?.parameters?.[7]);
+  if (responseVariable) variables.add(responseVariable);
+
+  actions
+    .filter((action) => actionInRange(Number(action.actionId), range))
+    .forEach((action) => {
+      if (action.action === 'LOCATE') {
+        [action.parameters?.[1], action.parameters?.[2]].forEach((value) => {
+          const variable = normalizeVariableName(value);
+          if (variable) variables.add(variable);
+        });
+      }
+      if (action.action === 'CASE') {
+        const variable = normalizeVariableName(action.parameters?.[0]);
+        if (variable) variables.add(variable);
+      }
+    });
+
+  return variables;
+}
+
+function isMenuRoutingSwitch(switchValue, menuRoutingVariables) {
+  const variable = normalizeVariableName(switchValue);
+  if (!variable) return false;
+  return menuRoutingVariables.has(variable);
+}
+
+function normalizeVariableName(value) {
+  return String(value ?? '')
+    .replace(/[{}"']/g, '')
+    .trim()
+    .split(/\s+/)[0]
+    .replace(/^global:/i, '')
+    .toUpperCase();
 }
 
 function isGenericNextStep(value) {
