@@ -313,8 +313,6 @@ function makeLayoutKey(script) {
   return (script?.actions ?? [])
     .map((action) => [
       action.actionId,
-      Math.round(Number(action.x) || 0),
-      Math.round(Number(action.y) || 0),
       action.defaultNextAction?.actionId ?? '',
       (action.branches ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
       (action.cases ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),

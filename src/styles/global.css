@@ -1033,6 +1033,601 @@ button:disabled {
   box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
 }
 
+.nice-documentation-modal {
+  width: min(1180px, calc(100vw - 42px));
+  height: min(820px, calc(100vh - 42px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+}
+
+.nice-documentation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.nice-documentation-toolbar span {
+  margin-left: auto;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.nice-documentation-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px 0;
+  background: #ffffff;
+}
+
+.nice-documentation-tabs button {
+  border: 1px solid #dbeafe;
+  border-bottom-color: #e5e7eb;
+  border-radius: 8px 8px 0 0;
+  padding: 9px 14px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.nice-documentation-tabs button.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.nice-documentation-view-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 16px 0;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  padding: 4px;
+  align-self: flex-start;
+  background: #ffffff;
+}
+
+.nice-documentation-view-mode span {
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.nice-documentation-view-mode button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: transparent;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.nice-documentation-view-mode button.is-active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.nice-documentation-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px 28px;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.nice-doc-line {
+  min-height: 18px;
+}
+
+.nice-doc-line.is-h1,
+.nice-doc-line.is-h2,
+.nice-doc-line.is-h3 {
+  margin-top: 10px;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 900;
+  white-space: normal;
+}
+
+.nice-doc-line.is-h1 {
+  font-size: 22px;
+}
+
+.nice-doc-line.is-h2 {
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 16px;
+}
+
+.nice-doc-line.is-h3 {
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.nice-doc-line.is-table {
+  white-space: pre;
+}
+
+.nice-doc-line.is-code-fence {
+  color: #475569;
+  font-weight: 900;
+}
+
+.nice-doc-action-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin: 0 1px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 0 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font: inherit;
+  font-weight: 900;
+}
+
+.nice-doc-action-link:hover {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+.nice-documentation-flow-shell {
+  flex: 1;
+  min-height: 0;
+  margin: 14px;
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.nice-documentation-flow-shell .react-flow {
+  background: #f8fafc;
+}
+
+.nice-documentation-empty {
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px;
+  color: #64748b;
+  text-align: center;
+}
+
+.nice-documentation-empty strong {
+  color: #0f172a;
+}
+
+.nice-doc-flow-node {
+  width: 248px;
+  min-height: 122px;
+  position: relative;
+  border: 1px solid #cbd5e1;
+  border-left: 5px solid #64748b;
+  border-radius: 9px;
+  padding: 12px 12px 10px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.1);
+}
+
+.nice-doc-flow-node.is-start { border-left-color: #16a34a; }
+.nice-doc-flow-node.is-menu { border-left-color: #2563eb; }
+.nice-doc-flow-node.is-option,
+.nice-doc-flow-node.is-optionHub { border-left-color: #7c3aed; }
+.nice-doc-flow-node.is-rule { border-left-color: #0f766e; }
+.nice-doc-flow-node.is-api { border-left-color: #0891b2; }
+.nice-doc-flow-node.is-hub { border-left-color: #0284c7; background: #f0f9ff; }
+.nice-doc-flow-node.is-output { border-left-color: #475569; }
+.nice-doc-flow-node.is-reject { border-left-color: #dc2626; }
+.nice-doc-flow-node.is-silence { border-left-color: #d97706; }
+.nice-doc-flow-node.is-onrelease { border-left-color: #9333ea; }
+
+.nice-doc-flow-node-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.nice-doc-flow-node h3 {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.nice-doc-flow-node p {
+  margin: 0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.nice-doc-flow-node dl {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 5px;
+}
+
+.nice-doc-flow-node dl div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.nice-doc-flow-node dt {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.nice-doc-flow-node dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nice-doc-flow-node-action {
+  display: inline-flex;
+  margin-top: 9px;
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.nice-doc-edge path {
+  stroke: #64748b;
+}
+
+.nice-doc-edge-default path {
+  stroke: #64748b;
+}
+
+.nice-doc-edge-success path {
+  stroke: #16a34a;
+}
+
+.nice-doc-edge-warning path {
+  stroke: #d97706;
+}
+
+.nice-doc-edge-error path {
+  stroke: #dc2626;
+}
+
+.nice-documentation-paths {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.nice-documentation-path-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.nice-documentation-path-card h3 {
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.nice-documentation-path-card ol {
+  margin: 0;
+  padding-left: 20px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.nice-d3-flowchart-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.nice-d3-flowchart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nice-d3-flowchart-toolbar strong {
+  margin-right: auto;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.nice-d3-flowchart-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 1px 1px, #dbeafe 1px, transparent 0) 0 0 / 22px 22px,
+    #f8fafc;
+}
+
+.nice-d3-flowchart-stage {
+  position: relative;
+  background: transparent;
+}
+
+.nice-d3-flowchart-svg {
+  display: block;
+}
+
+.nice-d3-node {
+  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.12));
+}
+
+.nice-d3-node-badge {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.nice-d3-node-title {
+  fill: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.nice-d3-node-subtitle {
+  fill: #334155;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.nice-d3-node-detail {
+  fill: #475569;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.nice-d3-edge {
+  opacity: 0.95;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nice-d3-edge-shadow {
+  stroke: #f8fafc;
+  stroke-width: 8px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+}
+
+.nice-d3-edge-label {
+  paint-order: stroke;
+  stroke: #f8fafc;
+  stroke-width: 5px;
+  fill: #334155;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.nice-d3-flowchart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.nice-d3-flowchart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nice-d3-flowchart-legend i {
+  width: 14px;
+  height: 4px;
+  border-radius: 99px;
+  background: #64748b;
+}
+
+.nice-d3-flowchart-legend i.is-success {
+  background: #16a34a;
+}
+
+.nice-d3-flowchart-legend i.is-warning {
+  background: #d97706;
+}
+
+.nice-d3-flowchart-legend i.is-error {
+  background: #dc2626;
+}
+
+.nice-d3-flowchart-legend i.is-option {
+  background: #7c3aed;
+}
+
+.nice-mermaid-flowchart-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.nice-mermaid-flowchart-toolbar {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.nice-mermaid-flowchart-toolbar strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.nice-mermaid-flowchart-toolbar span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.nice-mermaid-flowchart-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 1px 1px, #dbeafe 1px, transparent 0) 0 0 / 22px 22px,
+    #f8fafc;
+}
+
+.nice-mermaid-flowchart-stage {
+  display: inline-flex;
+  min-width: 100%;
+  min-height: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 34px;
+  background: transparent;
+}
+
+.nice-mermaid-render {
+  padding: 18px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.nice-mermaid-render svg {
+  display: block;
+  max-width: none !important;
+  height: auto;
+}
+
+.nice-mermaid-render .node rect,
+.nice-mermaid-render .node polygon,
+.nice-mermaid-render .node circle,
+.nice-mermaid-render .node ellipse {
+  filter: drop-shadow(0 8px 14px rgba(15, 23, 42, 0.12));
+}
+
+.nice-mermaid-render .edgeLabel {
+  color: #334155;
+  font-weight: 950;
+}
+
+.nice-mermaid-render .edgeLabel p {
+  border-radius: 6px;
+  padding: 3px 7px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc !important;
+}
+
+.nice-mermaid-render .edgePath .path {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2px;
+}
+
+.nice-mermaid-clickable-node {
+  cursor: pointer;
+}
+
+.nice-mermaid-clickable-node:hover rect,
+.nice-mermaid-clickable-node:hover polygon,
+.nice-mermaid-clickable-node:hover circle,
+.nice-mermaid-clickable-node:hover ellipse {
+  stroke-width: 3px !important;
+}
+
+.nice-documentation-export-canvas {
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+}
+
+.nice-documentation-export-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.nice-documentation-export-node {
+  position: absolute;
+}
+
+.nice-documentation-export-edge-label {
+  paint-order: stroke;
+  stroke: #f8fafc;
+  stroke-width: 5px;
+  fill: #334155;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .nice-snippet-studio-body {
   flex: 1;
   min-height: 0;
