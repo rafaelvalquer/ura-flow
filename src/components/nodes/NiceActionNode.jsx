@@ -32,8 +32,11 @@ export default function NiceActionNode({ data, selected }) {
   const branchCount = (data.branches?.length ?? 0) + (data.cases?.length ?? 0) + (data.defaultNextAction ? 1 : 0);
   const isCaseAction = data.action === 'CASE';
   const isIfAction = data.action === 'IF';
+  const isLoopAction = data.action === 'LOOP';
   const caseOutputs = isCaseAction ? makeCaseOutputs(data) : [];
   const ifOutputs = isIfAction ? makeIfOutputs(data) : [];
+  const loopOutputs = isLoopAction ? makeLoopOutputs(data) : [];
+  const decisionSummary = makeDecisionSummary(data);
 
   return (
     <div className={`nice-action-node nice-action-${data.action?.toLowerCase()} ${selected ? 'is-selected' : ''} ${data.isSimulated ? 'is-simulated' : ''}`}>
@@ -50,6 +53,12 @@ export default function NiceActionNode({ data, selected }) {
         <span>{data.parameters?.length ?? 0} params</span>
         <span>{branchCount} saidas</span>
       </div>
+      {decisionSummary ? (
+        <div className={`nice-decision-summary is-${decisionSummary.kind}`} title={decisionSummary.title}>
+          {decisionSummary.label ? <span>{decisionSummary.label}</span> : null}
+          <strong>{decisionSummary.value}</strong>
+        </div>
+      ) : null}
       {isCaseAction ? (
         <div className="nice-case-output-list">
           {caseOutputs.map((output) => (
@@ -78,11 +87,51 @@ export default function NiceActionNode({ data, selected }) {
             </div>
           ))}
         </div>
+      ) : isLoopAction ? (
+        <div className="nice-loop-output-list">
+          {loopOutputs.map((output) => (
+            <div className={`nice-loop-output-row is-${output.kind}`} key={output.id}>
+              <span>{output.label}</span>
+              <Handle
+                className="nice-loop-output-handle"
+                id={output.id}
+                type="source"
+                position={Position.Right}
+              />
+            </div>
+          ))}
+        </div>
       ) : (
         <Handle type="source" position={Position.Right} />
       )}
     </div>
   );
+}
+
+function makeDecisionSummary(data) {
+  if (data.action !== 'CASE' && data.action !== 'IF') {
+    return null;
+  }
+
+  const rawValue = cleanDecisionValue(data.parameters?.[0]);
+  const fallback = data.action === 'CASE' ? 'variavel nao informada' : 'condicao nao informada';
+  const value = rawValue || fallback;
+
+  return {
+    kind: data.action.toLowerCase(),
+    label: data.action === 'CASE' ? 'Avalia' : '',
+    title: `${data.action === 'CASE' ? 'Avalia' : 'Condicao'}: ${value}`,
+    value,
+  };
+}
+
+function cleanDecisionValue(value) {
+  return String(value ?? '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\{([^{}]+)\}$/, '$1')
+    .trim();
 }
 
 function makeCaseOutputs(data) {
@@ -132,6 +181,31 @@ function makeIfOutputs(data) {
 function makeIfHandleId(branch) {
   const label = /false/i.test(branch?.text ?? '') || Number(branch?.index) === 1 ? 'false' : 'true';
   return `if-${label}`;
+}
+
+function makeLoopOutputs(data) {
+  const outputs = [];
+  const branches = data.branches ?? [];
+  const finishedBranch = branches.find((branch) => /finished/i.test(branch.text ?? '') || Number(branch.index) === 0);
+  const repeatBranch = branches.find((branch) => /repeat/i.test(branch.text ?? '') || Number(branch.index) === 1);
+
+  outputs.push({
+    id: makeLoopHandleId(finishedBranch ?? { index: 0, text: 'Finished' }),
+    label: finishedBranch?.text || 'Finished',
+    kind: 'finished',
+  });
+  outputs.push({
+    id: makeLoopHandleId(repeatBranch ?? { index: 1, text: 'Repeat' }),
+    label: repeatBranch?.text || 'Repeat',
+    kind: 'repeat',
+  });
+
+  return outputs;
+}
+
+function makeLoopHandleId(branch) {
+  const label = /repeat/i.test(branch?.text ?? '') || Number(branch?.index) === 1 ? 'repeat' : 'finished';
+  return `loop-${label}`;
 }
 
 function safeHandlePart(value) {

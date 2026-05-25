@@ -257,6 +257,8 @@ function makeEdge(action, branch, label, className, kind, simulatedEdgeIds) {
     ? makeCaseHandleId(branch, label)
     : kind === 'branch' && action.action === 'IF'
       ? makeIfHandleId(branch, label)
+    : kind === 'branch' && action.action === 'LOOP'
+      ? makeLoopHandleId(branch, label)
     : kind === 'default' && action.action === 'CASE'
       ? makeDefaultCaseHandleId()
       : undefined;
@@ -293,6 +295,11 @@ function makeDefaultCaseHandleId() {
 function makeIfHandleId(branch, label = '') {
   const text = `${branch?.text ?? ''} ${label}`.toLowerCase();
   return /false/.test(text) || Number(branch?.index) === 1 ? 'if-false' : 'if-true';
+}
+
+function makeLoopHandleId(branch, label = '') {
+  const text = `${branch?.text ?? ''} ${label}`.toLowerCase();
+  return /repeat/.test(text) || Number(branch?.index) === 1 ? 'loop-repeat' : 'loop-finished';
 }
 
 function safeHandlePart(value) {

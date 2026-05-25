@@ -2120,6 +2120,51 @@ button:disabled {
   padding: 3px 6px;
 }
 
+.nice-decision-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 8px;
+  padding: 5px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 7px;
+  background: rgba(248, 250, 252, 0.82);
+  box-shadow: inset 3px 0 0 var(--decision-accent, #64748b);
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.nice-decision-summary span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.nice-decision-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nice-decision-summary.is-case {
+  --decision-accent: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(255, 251, 235, 0.88);
+}
+
+.nice-decision-summary.is-if {
+  --decision-accent: #14b8a6;
+  border-color: rgba(20, 184, 166, 0.25);
+  background: rgba(240, 253, 250, 0.9);
+}
+
 .nice-case-output-list {
   display: flex;
   flex-direction: column;
@@ -2216,6 +2261,62 @@ button:disabled {
 .nice-if-output-row.is-false .nice-if-output-handle {
   background: #ef4444;
   box-shadow: 0 0 0 1px #dc2626;
+}
+
+.nice-loop-output-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(124, 58, 237, 0.22);
+}
+
+.nice-loop-output-row {
+  position: relative;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 3px 16px 3px 7px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.64);
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.nice-loop-output-row.is-finished {
+  color: #5b21b6;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.nice-loop-output-row.is-repeat {
+  color: #075985;
+  background: rgba(14, 165, 233, 0.13);
+}
+
+.nice-loop-output-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nice-loop-output-row .nice-loop-output-handle {
+  right: -15px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #ffffff;
+}
+
+.nice-loop-output-row.is-finished .nice-loop-output-handle {
+  background: #8b5cf6;
+  box-shadow: 0 0 0 1px #7c3aed;
+}
+
+.nice-loop-output-row.is-repeat .nice-loop-output-handle {
+  background: #0ea5e9;
+  box-shadow: 0 0 0 1px #0284c7;
 }
 
 .nice-action-begin {
