@@ -6,6 +6,9 @@ export default function UxReportPanel({
   isOpen = true,
   onToggle,
   onWarningClick,
+  onShortestPathClick,
+  onShowAllPathsClick,
+  isShortestPathActive = false,
 }) {
   if (!analysis) return null;
 
@@ -28,11 +31,44 @@ export default function UxReportPanel({
       </div>
 
       <div className="stats-grid ux-summary-grid">
-        <Stat label="Caminhos" value={summary.totalPaths} />
+        <Stat
+          label="Caminhos"
+          value={summary.pathLimitReached ? `${summary.totalPaths}+` : summary.totalPaths}
+          title={summary.pathLimitReached ? 'Limite de analise atingido. Existem pelo menos estes caminhos.' : undefined}
+        />
         <Stat label="Prof. media" value={summary.averageDepth} />
         <Stat label="Maior caminho" value={summary.longestPath} />
         <Stat label="Criticos" value={summary.criticalCount} />
       </div>
+      {summary.pathLimitReached && (
+        <p className="diagnostics-context compact">
+          Resultado parcial: limite de {summary.totalPaths} caminhos atingido para preservar performance.
+        </p>
+      )}
+
+      {summary.shortestPath && (
+        <section className={`ux-shortest-path-card ${isShortestPathActive ? 'is-active' : ''}`}>
+          <div>
+            <span>Menor caminho</span>
+            <strong>{summary.shortestPath.stepCount} passos</strong>
+            <small>
+              {summary.shortestPath.audioSeconds}s de audio estimado
+              {summary.shortestPath.menuCount ? ` - ${summary.shortestPath.menuCount} menus` : ''}
+            </small>
+            <p>{summarizePath(summary.shortestPath)}</p>
+          </div>
+          <div className="ux-shortest-path-actions">
+            <button type="button" onClick={() => onShortestPathClick?.(summary.shortestPath)}>
+              Ver menor caminho
+            </button>
+            {isShortestPathActive && (
+              <button type="button" className="secondary-button" onClick={() => onShowAllPathsClick?.()}>
+                Ver todos
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       <ReportSection title="Problemas criticos" icon={<AlertTriangle size={14} />} items={sections.critical} kind="error" />
       <ReportSection title="Caminhos longos" icon={<Route size={14} />} items={sections.longPaths} />
@@ -62,13 +98,19 @@ export default function UxReportPanel({
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, title }) {
   return (
-    <div className="stat-card">
+    <div className="stat-card" title={title}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
+}
+
+function summarizePath(path) {
+  const states = path?.label?.split(' > ') ?? [];
+  if (states.length <= 4) return path.label;
+  return `${states.slice(0, 2).join(' > ')} > ... > ${states.slice(-2).join(' > ')}`;
 }
 
 function ReportSection({ title, items = [], icon = null, kind = 'warning' }) {

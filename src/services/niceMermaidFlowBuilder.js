@@ -1,5 +1,5 @@
 export function buildNiceMermaidDiagram(script, documentationFlow = {}, options = {}) {
-  const journey = buildMermaidJourney(script);
+  const journey = buildMermaidJourney(script, options);
   if (journey.nodes.length) {
     const diagram = createJourneyMermaidText(journey.nodes, journey.edges);
     const safeDiagram = createSafeMermaidText(journey.nodes, journey.edges);
@@ -132,13 +132,17 @@ export function buildNiceMermaidDiagram(script, documentationFlow = {}, options 
   return { diagram, safeDiagram, actionMap };
 }
 
-function buildMermaidJourney(script) {
+function buildMermaidJourney(script, options = {}) {
   const actions = getSortedActions(script);
   const actionsById = new Map(actions.map((action) => [Number(action.actionId), action]));
   const menus = actions.filter((action) => action.action === 'MENU');
 
   if (!menus.length && hasApiJourney(actions)) {
     return buildApiJourney(actions, actionsById);
+  }
+
+  if (options.mode === 'detail' && menus.length) {
+    return buildDetailedMenuJourney(actions, actionsById, menus);
   }
 
   const nodes = new Map();
@@ -217,6 +221,508 @@ function buildMermaidJourney(script) {
     nodes: [...nodes.values()],
     edges: dedupeEdges(edges),
   };
+}
+
+function buildDetailedMenuJourney(actions, actionsById, menus) {
+  const nodes = new Map();
+  const edges = [];
+  const outputNodes = new Map();
+  const context = { actionsById, nodes, edges, outputNodes };
+  const menuActionIds = menus.map((menu) => Number(menu.actionId)).sort((a, b) => a - b);
+
+  menus.forEach((menu, menuIndex) => {
+    const range = actionRangeForMenu(menuActionIds, menuIndex);
+    const menuNode = makeJourneyNode({
+      id: `detail_menu_${menu.actionId}`,
+      kind: 'menu',
+      title: `Menu: ${cleanCaption(menu.caption)}`,
+      lines: [
+        `Audio: ${menu.parameters?.[0] || 'nao informado'}`,
+        `Resposta: ${menu.parameters?.[7] || 'MRES'}`,
+        `Timeout: ${menu.parameters?.[5] || '-'}`,
+      ],
+      actionId: Number(menu.actionId),
+    });
+    const routerNode = makeJourneyNode({
+      id: `detail_router_${menu.actionId}`,
+      kind: 'router',
+      title: 'Roteamento de opcoes',
+      lines: [`Variavel: ${menu.parameters?.[7] || 'MRES'}`],
+      actionId: Number(menu.actionId),
+    });
+
+    nodes.set(menuNode.id, menuNode);
+    nodes.set(routerNode.id, routerNode);
+    addEdge(edges, menuNode.id, routerNode.id, 'Roteia');
+
+    collectDetailedMenuOptions(actions, actionsById, range, menu).forEach((option, index) => {
+      const optionNode = makeJourneyNode({
+        id: `detail_option_${menu.actionId}_${safeId(option.key)}_${index}`,
+        kind: 'option',
+        title: `Opcao ${option.key}`,
+        lines: compactLines([
+          option.output.audio && `Audio: ${option.output.audio}`,
+          option.output.nextStep && `NEXT_STEP: ${option.output.nextStep}`,
+          option.output.scriptpoint && `scriptpoint: ${option.output.scriptpoint}`,
+          option.output.transferCode && `TransferCode: ${option.output.transferCode}`,
+        ]),
+        actionId: option.actionId,
+      });
+      nodes.set(optionNode.id, optionNode);
+      addEdge(edges, routerNode.id, optionNode.id, `Case ${option.key}`);
+
+      const renderedSnippetLogic = option.block && renderSnippetDecisionTree({
+        ...context,
+        sourceNodeId: optionNode.id,
+        code: option.block,
+        actionId: option.actionId,
+        idPrefix: `detail_option_${menu.actionId}_${safeId(option.key)}`,
+      });
+
+      if (!renderedSnippetLogic) {
+        const output = option.block ? summarizeCodeOutput(option.block) : option.output;
+        if (hasOutput(output)) {
+          const outputNode = getOutputNode(outputNodes, nodes, output, option.actionId);
+          addEdge(edges, optionNode.id, outputNode.id, output.nextStep ? 'NEXT_STEP' : 'Saida');
+        } else if (option.caseTargetActionId) {
+          traverseDetailedAction({
+            ...context,
+            sourceNodeId: optionNode.id,
+            actionId: option.caseTargetActionId,
+            edgeLabel: option.block ? 'Destino' : 'Segue',
+            visited: new Set(),
+          });
+        }
+      }
+
+      if (renderedSnippetLogic && option.caseTargetActionId && !hasOutput(option.output)) {
+        traverseDetailedAction({
+          ...context,
+          sourceNodeId: optionNode.id,
+          actionId: option.caseTargetActionId,
+          edgeLabel: 'Destino tecnico',
+          visited: new Set(),
+        });
+      }
+    });
+
+    renderDetailedMenuRetries({ ...context, menu, menuNode, actions, range });
+  });
+
+  return {
+    nodes: [...nodes.values()],
+    edges: dedupeEdges(edges),
+  };
+}
+
+function collectDetailedMenuOptions(actions, actionsById, range, menu) {
+  const optionsByKey = new Map();
+  const menuRoutingVariables = getMenuRoutingVariables(actions, range, menu);
+
+  actions
+    .filter((action) => action.action === 'CASE' && actionInRange(Number(action.actionId), range))
+    .forEach((action) => {
+      (action.cases ?? []).forEach((branch) => {
+        const key = normalizeOptionKey(branch.text || `#${branch.index ?? optionsByKey.size + 1}`);
+        if (!key) return;
+        const target = actionsById.get(Number(branch.actionId));
+        const current = optionsByKey.get(key) ?? {
+          key: branch.text || key,
+          output: {},
+          actionId: Number(action.actionId),
+          sourceActionIds: [],
+        };
+        current.caseTargetActionId = Number(branch.actionId);
+        current.caseActionId = Number(action.actionId);
+        current.actionId = Number(target?.actionId ?? action.actionId);
+        current.caseOutput = summarizeActionOutput(target);
+        current.sourceActionIds.push(Number(action.actionId));
+        optionsByKey.set(key, current);
+      });
+    });
+
+  actions
+    .filter((action) => action.action === 'SNIPPET' && actionInRange(Number(action.actionId), range))
+    .forEach((action) => {
+      extractSnippetSwitchCases(action.parameters?.[0] ?? '').forEach((item) => {
+        if (!isMenuRoutingSwitch(item.switchValue, menuRoutingVariables)) return;
+        const key = normalizeOptionKey(item.caseValue);
+        if (!key) return;
+        const current = optionsByKey.get(key) ?? {
+          key: item.caseValue,
+          output: {},
+          actionId: Number(action.actionId),
+          sourceActionIds: [],
+        };
+        current.key = item.caseValue;
+        current.block = item.block;
+        current.switchActionId = Number(action.actionId);
+        current.switchOutput = item.output;
+        current.actionId = Number(action.actionId);
+        current.sourceActionIds.push(Number(action.actionId));
+        optionsByKey.set(key, current);
+      });
+    });
+
+  return [...optionsByKey.values()].map((option) => {
+    const switchMeaningful = isMeaningfulOutput(option.switchOutput);
+    const caseMeaningful = isMeaningfulOutput(option.caseOutput);
+    return {
+      ...option,
+      output: switchMeaningful ? option.switchOutput : caseMeaningful ? option.caseOutput : option.switchOutput ?? option.caseOutput ?? {},
+      actionId: option.switchActionId ?? option.caseTargetActionId ?? option.caseActionId ?? option.actionId,
+    };
+  });
+}
+
+function renderDetailedMenuRetries({ nodes, edges, outputNodes, menu, menuNode, actions, range, actionsById }) {
+  actions
+    .filter((action) => action.action === 'LOOP' && actionInRange(Number(action.actionId), range))
+    .forEach((loop) => {
+      const text = `${loop.caption ?? ''} ${loop.parameters?.[1] ?? ''}`;
+      const isSil = /sil/i.test(text);
+      const isRej = /rej/i.test(text);
+      if (!isSil && !isRej) return;
+      const loopNode = makeJourneyNode({
+        id: `detail_loop_${loop.actionId}`,
+        kind: isSil ? 'silence' : 'error',
+        title: isSil ? 'SIL / Timeout' : 'REJ',
+        lines: [`Tentativas: ${loop.parameters?.[0] || '-'}`],
+        actionId: Number(loop.actionId),
+      });
+      nodes.set(loopNode.id, loopNode);
+      addEdge(edges, menuNode.id, loopNode.id, isSil ? 'Timeout/SIL' : 'REJ');
+      (loop.branches ?? []).forEach((branch) => {
+        const label = /repeat/i.test(branch.text ?? '') || Number(branch.index) === 1 ? 'Repeat' : 'Finished';
+        if (label === 'Repeat') {
+          const retryAction = actionsById.get(Number(branch.actionId));
+          if (retryAction) {
+            const retryNode = makeDetailedActionNode(retryAction);
+            nodes.set(retryNode.id, retryNode);
+            addEdge(edges, loopNode.id, retryNode.id, label);
+            addEdge(edges, retryNode.id, menuNode.id, 'Repete menu');
+          } else {
+            addEdge(edges, loopNode.id, menuNode.id, 'Repete menu');
+          }
+          return;
+        }
+        traverseDetailedAction({
+          nodes,
+          edges,
+          outputNodes,
+          actionsById,
+          sourceNodeId: loopNode.id,
+          actionId: Number(branch.actionId),
+          edgeLabel: label,
+          visited: new Set(),
+        });
+      });
+    });
+}
+
+function traverseDetailedAction({ nodes, edges, outputNodes, actionsById, sourceNodeId, actionId, edgeLabel = 'Segue', visited = new Set() }) {
+  const action = actionsById.get(Number(actionId));
+  if (!action) return;
+  const visitKey = `${sourceNodeId}->${action.actionId}`;
+  if (visited.has(visitKey)) {
+    const loopNode = makeJourneyNode({
+      id: `detail_loop_guard_${safeId(sourceNodeId)}_${safeId(action.actionId)}`,
+      kind: 'advanced',
+      title: 'Loop detectado',
+      lines: [`Retorna para ${cleanCaption(action.caption || action.action)}`],
+      actionId: Number(action.actionId),
+    });
+    nodes.set(loopNode.id, loopNode);
+    addEdge(edges, sourceNodeId, loopNode.id, edgeLabel);
+    return;
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(visitKey);
+
+  const actionNode = makeDetailedActionNode(action);
+  nodes.set(actionNode.id, actionNode);
+  addEdge(edges, sourceNodeId, actionNode.id, edgeLabel);
+
+  if (action.action === 'IF') {
+    (action.branches ?? []).forEach((branch) => {
+      traverseDetailedAction({
+        nodes,
+        edges,
+        outputNodes,
+        actionsById,
+        sourceNodeId: actionNode.id,
+        actionId: Number(branch.actionId),
+        edgeLabel: /false/i.test(branch.text ?? '') || Number(branch.index) === 1 ? 'False' : 'True',
+        visited: nextVisited,
+      });
+    });
+    return;
+  }
+
+  if (action.action === 'CASE') {
+    (action.cases ?? []).forEach((branch) => {
+      traverseDetailedAction({
+        nodes,
+        edges,
+        outputNodes,
+        actionsById,
+        sourceNodeId: actionNode.id,
+        actionId: Number(branch.actionId),
+        edgeLabel: branch.text ? `Case ${branch.text}` : 'Case',
+        visited: nextVisited,
+      });
+    });
+    if (action.defaultNextAction?.actionId) {
+      traverseDetailedAction({
+        nodes,
+        edges,
+        outputNodes,
+        actionsById,
+        sourceNodeId: actionNode.id,
+        actionId: Number(action.defaultNextAction.actionId),
+        edgeLabel: 'Default',
+        visited: nextVisited,
+      });
+    }
+    return;
+  }
+
+  if (action.action === 'LOOP') {
+    (action.branches ?? []).forEach((branch) => {
+      traverseDetailedAction({
+        nodes,
+        edges,
+        outputNodes,
+        actionsById,
+        sourceNodeId: actionNode.id,
+        actionId: Number(branch.actionId),
+        edgeLabel: /repeat/i.test(branch.text ?? '') || Number(branch.index) === 1 ? 'Repeat' : 'Finished',
+        visited: nextVisited,
+      });
+    });
+    return;
+  }
+
+  if (action.action === 'SNIPPET') {
+    const rendered = renderSnippetDecisionTree({
+      nodes,
+      edges,
+      outputNodes,
+      actionsById,
+      sourceNodeId: actionNode.id,
+      code: action.parameters?.[0] ?? '',
+      actionId: Number(action.actionId),
+      idPrefix: `detail_snippet_${action.actionId}`,
+    });
+    const output = summarizeActionOutput(action);
+    if (!rendered && hasOutput(output)) {
+      const outputNode = getOutputNode(outputNodes, nodes, output, Number(action.actionId));
+      addEdge(edges, actionNode.id, outputNode.id, output.nextStep ? 'NEXT_STEP' : 'Saida');
+      return;
+    }
+  }
+
+  if (['RUNSCRIPT', 'RETURN'].includes(action.action)) return;
+
+  if (action.defaultNextAction?.actionId) {
+    traverseDetailedAction({
+      nodes,
+      edges,
+      outputNodes,
+      actionsById,
+      sourceNodeId: actionNode.id,
+      actionId: Number(action.defaultNextAction.actionId),
+      edgeLabel: 'Segue',
+      visited: nextVisited,
+    });
+  }
+}
+
+function makeDetailedActionNode(action) {
+  if (action.action === 'IF') {
+    return makeJourneyNode({
+      id: `detail_action_${action.actionId}`,
+      kind: 'rule',
+      title: cleanCaption(action.caption || 'Regra / IF'),
+      lines: [action.parameters?.[0] || 'IF sem expressao'],
+      actionId: Number(action.actionId),
+    });
+  }
+  if (['RUNSUB', 'REST_API', 'WORKFLOWDATA'].includes(action.action)) {
+    return makeJourneyNode({
+      id: `detail_action_${action.actionId}`,
+      kind: 'api',
+      title: cleanCaption(action.caption || action.action),
+      lines: linesForAction(action, summarizeActionOutput(action)),
+      actionId: Number(action.actionId),
+    });
+  }
+  if (['RUNSCRIPT', 'RETURN', 'PLAY'].includes(action.action)) {
+    return makeJourneyNode({
+      id: `detail_action_${action.actionId}`,
+      kind: 'output',
+      title: cleanCaption(action.caption || action.action),
+      lines: linesForAction(action, summarizeActionOutput(action)),
+      actionId: Number(action.actionId),
+    });
+  }
+  if (action.action === 'LOOP') {
+    return makeJourneyNode({
+      id: `detail_action_${action.actionId}`,
+      kind: /sil/i.test(`${action.caption ?? ''} ${action.parameters?.[1] ?? ''}`) ? 'silence' : 'error',
+      title: cleanCaption(action.caption || 'Loop'),
+      lines: [`Tentativas: ${action.parameters?.[0] || '-'}`, action.parameters?.[1] && `Variavel: ${action.parameters[1]}`],
+      actionId: Number(action.actionId),
+    });
+  }
+  if (action.action === 'ASSIGN') {
+    return makeJourneyNode({
+      id: `detail_action_${action.actionId}`,
+      kind: 'output',
+      title: cleanCaption(action.caption || 'Assign'),
+      lines: compactLines([`${action.parameters?.[0] || 'VAR'} = ${action.parameters?.[1] || ''}`]),
+      actionId: Number(action.actionId),
+    });
+  }
+  return makeJourneyNode({
+    id: `detail_action_${action.actionId}`,
+    kind: action.action === 'SNIPPET' && isAdvancedSnippet(action.parameters?.[0] ?? '') ? 'advanced' : 'output',
+    title: cleanCaption(action.caption || action.action),
+    lines: linesForAction(action, summarizeActionOutput(action)),
+    actionId: Number(action.actionId),
+  });
+}
+
+function renderSnippetDecisionTree({ nodes, edges, outputNodes, sourceNodeId, code, actionId, idPrefix }) {
+  const tree = extractSnippetIfTree(code);
+  if (!tree.length) return false;
+  tree.forEach((item, index) => {
+    renderSnippetIfNode({ nodes, edges, outputNodes, sourceNodeId, item, actionId, idPrefix: `${idPrefix}_if_${index}`, edgeLabel: 'IF' });
+  });
+  return true;
+}
+
+function renderSnippetIfNode({ nodes, edges, outputNodes, sourceNodeId, item, actionId, idPrefix, edgeLabel }) {
+  const ruleNode = makeJourneyNode({
+    id: `detail_${safeId(idPrefix)}`,
+    kind: 'rule',
+    title: 'Condicao em snippet',
+    lines: [item.expression || 'IF sem expressao'],
+    actionId,
+  });
+  nodes.set(ruleNode.id, ruleNode);
+  addEdge(edges, sourceNodeId, ruleNode.id, edgeLabel);
+  renderSnippetBranch({ nodes, edges, outputNodes, sourceNodeId: ruleNode.id, branch: item.trueBranch, actionId, idPrefix: `${idPrefix}_true`, label: 'True' });
+  renderSnippetBranch({ nodes, edges, outputNodes, sourceNodeId: ruleNode.id, branch: item.falseBranch, actionId, idPrefix: `${idPrefix}_false`, label: 'False' });
+}
+
+function renderSnippetBranch({ nodes, edges, outputNodes, sourceNodeId, branch, actionId, idPrefix, label }) {
+  if (!branch) return;
+  if (branch.children.length) {
+    branch.children.forEach((child, index) => {
+      renderSnippetIfNode({ nodes, edges, outputNodes, sourceNodeId, item: child, actionId, idPrefix: `${idPrefix}_${index}`, edgeLabel: label });
+    });
+    return;
+  }
+  if (hasOutput(branch.output)) {
+    const outputNode = getOutputNode(outputNodes, nodes, branch.output, actionId);
+    addEdge(edges, sourceNodeId, outputNode.id, label);
+    return;
+  }
+  const assignments = Object.keys(extractAssignments(branch.code ?? ''));
+  if (assignments.length) {
+    const advancedNode = makeJourneyNode({
+      id: `detail_logic_${safeId(idPrefix)}`,
+      kind: 'advanced',
+      title: 'Logica do branch',
+      lines: [`Variaveis: ${assignments.slice(0, 6).join(', ')}`],
+      actionId,
+    });
+    nodes.set(advancedNode.id, advancedNode);
+    addEdge(edges, sourceNodeId, advancedNode.id, label);
+  }
+}
+
+function extractSnippetIfTree(code) {
+  return parseTopLevelIfBlocks(stripCommentLines(code));
+}
+
+function parseTopLevelIfBlocks(code) {
+  const text = String(code ?? '');
+  const items = [];
+  let index = 0;
+  while (index < text.length) {
+    const match = findNextIfAtDepth(text, index);
+    if (!match) break;
+    const openBrace = text.indexOf('{', match.index);
+    if (openBrace < 0) break;
+    const trueEnd = findMatchingBrace(text, openBrace);
+    if (trueEnd < 0) break;
+    const expression = text.slice(match.index + match.token.length, openBrace).trim();
+    const trueCode = text.slice(openBrace + 1, trueEnd);
+    const elseInfo = readElseBlock(text, trueEnd + 1);
+    items.push({
+      expression,
+      trueBranch: makeSnippetBranch(trueCode),
+      falseBranch: elseInfo ? makeSnippetBranch(elseInfo.code) : null,
+    });
+    index = elseInfo ? elseInfo.end + 1 : trueEnd + 1;
+  }
+  return items;
+}
+
+function makeSnippetBranch(code) {
+  return {
+    code,
+    output: summarizeCodeOutput(code),
+    children: parseTopLevelIfBlocks(code),
+  };
+}
+
+function findNextIfAtDepth(text, fromIndex) {
+  let depth = 0;
+  for (let index = fromIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '{') depth += 1;
+    if (char === '}') depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\bIF\b/i.test(text.slice(index, index + 2)) && !/[A-Za-z0-9_]/.test(text[index - 1] ?? '') && !/[A-Za-z0-9_]/.test(text[index + 2] ?? '')) {
+      return { index, token: text.slice(index, index + 2) };
+    }
+  }
+  return null;
+}
+
+function readElseBlock(text, fromIndex) {
+  const rest = text.slice(fromIndex);
+  const elseMatch = rest.match(/^\s*ELSE\s*(?:\r?\n|\s)*\{/i);
+  if (!elseMatch) return null;
+  const openBrace = fromIndex + elseMatch[0].lastIndexOf('{');
+  const end = findMatchingBrace(text, openBrace);
+  if (end < 0) return null;
+  return {
+    code: text.slice(openBrace + 1, end),
+    end,
+  };
+}
+
+function stripCommentLines(code) {
+  return String(code ?? '')
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
+function hasOutput(output) {
+  return Boolean(output?.nextStep || output?.audio || output?.scriptpoint || output?.transferCode);
+}
+
+function isMeaningfulOutput(output = {}) {
+  return Boolean(
+    output.audio ||
+      output.scriptpoint ||
+      output.transferCode ||
+      (output.nextStep && !isGenericNextStep(output.nextStep))
+  );
 }
 
 function hasApiJourney(actions) {
@@ -1196,15 +1702,15 @@ export function extractAssignments(code) {
 }
 
 export function extractSnippetSwitchCases(code) {
-  const text = String(code ?? '');
+  const text = stripCommentLines(code);
   const switchMatch = text.match(/\bSWITCH\s+([^\r\n{]+)/i);
   const switchValue = switchMatch?.[1]?.trim() || 'SWITCH';
   const casePattern = /\bCASE\s+"?([^"\r\n{]+)"?\s*\{/gi;
   const matches = [...text.matchAll(casePattern)];
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = matches[index + 1]?.index ?? text.length;
-    const block = text.slice(start, end);
+  return matches.map((match) => {
+    const openBrace = text.indexOf('{', match.index);
+    const end = findMatchingBrace(text, openBrace);
+    const block = end > openBrace ? text.slice(openBrace + 1, end) : '';
     return {
       switchValue,
       caseValue: match[1].trim(),

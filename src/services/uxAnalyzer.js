@@ -19,6 +19,7 @@ export function buildUxAnalysis(parsedData, targetStateName = '') {
   const roots = findPathRoots(paths, stateByKey);
   const nodeAnalyses = buildNodeAnalyses(parsedData, graph);
   const report = buildReport({ parsedData, graph, paths, nodeAnalyses, targetState });
+  const shortestPath = getShortestUxPath(paths);
 
   return {
     targetStateName: targetState.sheetName,
@@ -27,10 +28,25 @@ export function buildUxAnalysis(parsedData, targetStateName = '') {
     relevantEdges: reachable.edges,
     paths,
     nodeAnalyses,
-    summary: report.summary,
+    summary: {
+      ...report.summary,
+      pathLimitReached: paths.length >= MAX_PATHS,
+      shortestPath,
+    },
     sections: report.sections,
     warnings: report.warnings,
   };
+}
+
+export function getShortestUxPath(paths = []) {
+  return [...paths]
+    .filter((path) => !path.loopDetected && !path.deadEnd)
+    .sort((first, second) => (
+      first.stepCount - second.stepCount
+      || first.audioSeconds - second.audioSeconds
+      || first.menuCount - second.menuCount
+      || first.label.localeCompare(second.label)
+    ))[0] ?? paths[0] ?? null;
 }
 
 export function estimatePromptSeconds(prompt = '') {
@@ -51,6 +67,8 @@ function emptyAnalysis(targetStateName = '') {
       averageDepth: 0,
       longestPath: 0,
       totalPaths: 0,
+      pathLimitReached: false,
+      shortestPath: null,
       criticalCount: 0,
       warningCount: 0,
     },

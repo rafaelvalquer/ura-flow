@@ -3538,6 +3538,69 @@ button:disabled {
   margin: 10px 0 12px;
 }
 
+.ux-shortest-path-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin: 10px 0 12px;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  padding: 11px;
+  background: linear-gradient(180deg, #f0f9ff, #ffffff);
+  box-shadow: 0 8px 18px rgba(14, 165, 233, 0.08);
+}
+
+.ux-shortest-path-card.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.ux-shortest-path-card span {
+  display: block;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ux-shortest-path-card strong {
+  display: block;
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.ux-shortest-path-card small,
+.ux-shortest-path-card p {
+  margin: 3px 0 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.ux-shortest-path-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ux-shortest-path-actions button {
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ux-shortest-path-actions button.secondary-button {
+  background: #ffffff;
+  color: #1d4ed8;
+}
+
 .ux-report-section {
   margin-top: 9px;
   border: 1px solid #e5e7eb;

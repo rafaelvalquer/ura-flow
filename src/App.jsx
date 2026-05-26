@@ -31,6 +31,7 @@ export default function App() {
   const [uxTargetState, setUxTargetState] = useState("");
   const [uxAnalysisResult, setUxAnalysisResult] = useState(null);
   const [uxGraphResult, setUxGraphResult] = useState({ nodes: [], edges: [] });
+  const [uxShortestPathActive, setUxShortestPathActive] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState("Lendo arquivo Excel");
   const [viewMode, setViewMode] = useState("stateView");
   const [search, setSearch] = useState("");
@@ -192,6 +193,7 @@ export default function App() {
     setUxTargetState("");
     setUxAnalysisResult(null);
     setUxGraphResult({ nodes: [], edges: [] });
+    setUxShortestPathActive(false);
   }
 
   function handleClear() {
@@ -251,6 +253,7 @@ export default function App() {
     setUxTargetState(stateName);
     setUxAnalysisResult(null);
     setUxGraphResult({ nodes: [], edges: [] });
+    setUxShortestPathActive(false);
     setSelectedState(stateName);
     setViewMode("uxAnalysisView");
 
@@ -271,6 +274,7 @@ export default function App() {
 
       setUxAnalysisResult(analysis);
       setUxGraphResult(uxGraph);
+      setUxShortestPathActive(false);
       setDiagnosticsScope("document");
       setLayoutVersion((version) => version + 1);
       setFocusRequest({
@@ -412,6 +416,36 @@ export default function App() {
   function handleAnalyzeExperience(stateName) {
     if (!stateName) return;
     runUxAnalysis(stateName);
+  }
+
+  function handleShowShortestPath(path) {
+    if (!parsedData || !uxAnalysisResult || !path) return;
+    const filteredAnalysis = {
+      ...uxAnalysisResult,
+      paths: [path],
+      relevantEdges: path.steps,
+      relevantStateKeys: path.states,
+    };
+    setUxGraphResult(buildUxFlow(parsedData, filteredAnalysis));
+    setUxShortestPathActive(true);
+    setViewMode("uxAnalysisView");
+    setFocusRequest({
+      kind: "ux-shortest-path",
+      sheetName: uxAnalysisResult.targetStateName,
+      nonce: Date.now(),
+    });
+  }
+
+  function handleShowAllUxPaths() {
+    if (!parsedData || !uxAnalysisResult) return;
+    setUxGraphResult(buildUxFlow(parsedData, uxAnalysisResult));
+    setUxShortestPathActive(false);
+    setViewMode("uxAnalysisView");
+    setFocusRequest({
+      kind: "ux-analysis",
+      sheetName: uxAnalysisResult.targetStateName,
+      nonce: Date.now(),
+    });
   }
 
   function handleOrganize() {
@@ -564,6 +598,9 @@ export default function App() {
                           isOpen={sidebarAccordions.ux}
                           onToggle={() => toggleSidebarAccordion("ux")}
                           onWarningClick={handleWarningClick}
+                          onShortestPathClick={handleShowShortestPath}
+                          onShowAllPathsClick={handleShowAllUxPaths}
+                          isShortestPathActive={uxShortestPathActive}
                         />
                       )}
                     </>
