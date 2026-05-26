@@ -7,7 +7,7 @@ mermaid.initialize({
   securityLevel: 'loose',
   theme: 'base',
   flowchart: {
-    curve: 'linear',
+    curve: 'basis',
     htmlLabels: true,
     nodeSpacing: 96,
     rankSpacing: 128,

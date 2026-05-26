@@ -1240,6 +1240,7 @@ function makeJourneyNode({ id, kind, title, lines = [], actionId }) {
 }
 
 function createJourneyMermaidText(nodes, edges) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const lines = [
     'flowchart TD',
     '  %% Fluxograma funcional NICE',
@@ -1247,7 +1248,7 @@ function createJourneyMermaidText(nodes, edges) {
   ];
 
   dedupeEdges(edges).forEach((edge) => {
-    lines.push(`  ${mermaidEdgeLine(edge)}`);
+    lines.push(`  ${mermaidEdgeLine(edge, nodeById)}`);
   });
 
   nodes.forEach((node) => {
@@ -1493,6 +1494,7 @@ export function createOutputNodeFromAssignments(output, idPrefix, actionId) {
 
 function createMermaidText(nodes, edges, options = {}) {
   if (options.summary) return createSummaryMermaidText(nodes, edges);
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   const lines = [
     'flowchart TD',
@@ -1516,7 +1518,7 @@ function createMermaidText(nodes, edges, options = {}) {
   ];
 
   edges.forEach((edge) => {
-    lines.push(`  ${mermaidNodeId(edge.source)} -->|${sanitizeMermaidEdgeLabel(edge.label || 'Default')}| ${mermaidNodeId(edge.target)}`);
+    lines.push(`  ${mermaidEdgeLine(edge, nodeById)}`);
   });
 
   nodes.forEach((node) => {
@@ -1581,6 +1583,7 @@ function createSummaryMermaidText(nodes, edges) {
     return ay - by || ax - bx || String(a.title).localeCompare(String(b.title));
   });
   const sortedEdges = sortMermaidEdges(edges, nodes);
+  const nodeById = new Map(sortedNodes.map((node) => [node.id, node]));
   const lines = [
     'flowchart TD',
     '  %% Fluxograma documental NICE - ordem orientada pela jornada',
@@ -1588,7 +1591,7 @@ function createSummaryMermaidText(nodes, edges) {
   ];
 
   sortedEdges.forEach((edge) => {
-    lines.push(`  ${mermaidEdgeLine(edge)}`);
+    lines.push(`  ${mermaidEdgeLine(edge, nodeById)}`);
   });
 
   sortedNodes.forEach((node) => {
@@ -1639,11 +1642,57 @@ function sortMermaidEdges(edges, nodes) {
   });
 }
 
-function mermaidEdgeLine(edge) {
+function mermaidEdgeLine(edge, nodeById = new Map()) {
   const source = mermaidNodeId(edge.source);
   const target = mermaidNodeId(edge.target);
   const label = sanitizeMermaidEdgeLabel(edge.label || 'Default');
+  const operator = getMermaidEdgeOperator(edge, nodeById);
+  if (operator === '==>') return `${source} == ${label} ==> ${target}`;
+  if (operator === '-.->') return `${source} -. ${label} .-> ${target}`;
+  if (operator === '--x') return `${source} -- ${label} --x ${target}`;
   return `${source} -->|${label}| ${target}`;
+}
+
+function getMermaidEdgeOperator(edge, nodeById = new Map()) {
+  const label = normalizeMermaidSemanticText(edge?.label);
+  const sourceText = nodeSemanticText(nodeById.get(edge?.source));
+  const targetText = nodeSemanticText(nodeById.get(edge?.target));
+  const combined = `${label} ${sourceText} ${targetText}`;
+
+  if (/\b(api fechada|bloqueio|bloq|nok|tchau|finaliza|finalizado|cancelado|encerra|encerramento)\b/.test(combined)) {
+    return '--x';
+  }
+
+  if (/\b(false|erro|error|rej|maxrej|sil|timeout|alerta|tratamento erro|exception|falha|failed)\b/.test(combined)) {
+    return '-.->';
+  }
+
+  if (/\b(true|ok|sucesso|success|next step|return|retorno esperado)\b/.test(combined)) {
+    return '==>';
+  }
+
+  if (label === 'segue' && !/\b(logica|resumo|atencao)\b/.test(targetText)) {
+    return '==>';
+  }
+
+  return '-->';
+}
+
+function nodeSemanticText(node) {
+  if (!node) return '';
+  return normalizeMermaidSemanticText([
+    node.type,
+    node.title,
+    ...(node.lines ?? []),
+  ].filter(Boolean).join(' '));
+}
+
+function normalizeMermaidSemanticText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/_/g, ' ')
+    .toLowerCase();
 }
 
 function isReturnEdge(edge) {
