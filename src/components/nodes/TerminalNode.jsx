@@ -13,6 +13,7 @@ export default function TerminalNode({ data }) {
       </div>
       <div className="node-subtitle">Fim da chamada</div>
       <NodeBadges data={data} />
+      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

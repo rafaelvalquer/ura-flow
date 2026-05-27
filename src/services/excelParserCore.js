@@ -14,6 +14,8 @@ const HEADER_ALIASES = {
   transferCode: ['transfercode', 'transfer code', 'codigo transferencia', 'codigo de transferencia'],
 };
 
+const IGNORED_SHEET_NAMES = new Set(['versionamento', 'versionamento bi']);
+
 export async function parseExcelFileInWorker(file, onProgress = () => {}) {
   onProgress({
     percent: 0,
@@ -111,7 +113,7 @@ function yieldToBrowser() {
 }
 
 function isIgnoredSheetName(sheetName) {
-  return normalizeKey(sheetName) === 'versionamento';
+  return IGNORED_SHEET_NAMES.has(normalizeKey(sheetName));
 }
 
 function findDecisionTable(rows) {

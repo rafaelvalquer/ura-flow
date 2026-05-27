@@ -76,7 +76,7 @@ function branchKey(branch) {
 
 function normalizeSegments(segments = []) {
   return (segments ?? []).map((point) => ({
-    X: Number(point.X ?? point.x) || 0,
-    Y: Number(point.Y ?? point.y) || 0,
+    x: Number(point.x ?? point.X) || 0,
+    y: Number(point.y ?? point.Y) || 0,
   }));
 }

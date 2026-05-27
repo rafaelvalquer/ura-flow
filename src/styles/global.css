@@ -37,6 +37,16 @@ button:disabled {
   flex-direction: column;
 }
 
+.spec-workspace-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.spec-workspace-shell .workspace-mode-switch,
+.spec-workspace-shell .app-toolbar {
+  flex: 0 0 auto;
+}
+
 .loading-overlay {
   position: fixed;
   inset: 0;
@@ -244,6 +254,12 @@ button:disabled {
   transition: grid-template-columns 180ms ease;
 }
 
+.spec-workspace-shell .workspace-grid {
+  height: calc(100vh - 120px);
+  overflow: hidden;
+  align-items: stretch;
+}
+
 .workspace-grid.details-collapsed {
   grid-template-columns: 336px minmax(760px, 1fr) 54px;
 }
@@ -259,6 +275,43 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.spec-workspace-shell .left-sidebar {
+  overflow: auto;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.spec-workspace-shell .left-sidebar > .panel-section,
+.spec-workspace-shell .left-sidebar > .upload-accordion,
+.spec-workspace-shell .left-sidebar > .global-search-panel {
+  flex: 0 0 auto;
+}
+
+.spec-workspace-shell .left-sidebar .panel-section {
+  padding: 12px;
+}
+
+.spec-workspace-shell .mode-panel,
+.spec-workspace-shell .view-panel {
+  padding: 10px 12px;
+}
+
+.spec-workspace-shell .mode-panel .section-header,
+.spec-workspace-shell .view-panel .section-header {
+  margin-bottom: 8px;
+}
+
+.spec-workspace-shell .view-panel .segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.spec-workspace-shell .view-panel .segmented-control button {
+  min-width: 0;
+  padding-inline: 6px;
+  white-space: normal;
 }
 
 .upload-panel,
@@ -502,19 +555,51 @@ button:disabled {
   min-height: 300px;
 }
 
+.spec-workspace-shell .state-list-section.is-open {
+  flex: 0 0 470px;
+  min-height: 470px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.spec-workspace-shell .state-list-section.is-open .accordion-content {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 .state-list-section.is-collapsed,
 .diagnostics-panel.is-collapsed,
 .upload-accordion.is-collapsed {
   min-height: 0;
 }
 
+.state-list-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .state-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 4px;
   max-height: 340px;
   overflow: auto;
+}
+
+.spec-workspace-shell .state-list {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 350px;
+  padding-right: 3px;
 }
 
 .state-list-item {
@@ -522,17 +607,24 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 5px;
-  padding: 10px;
+  gap: 4px;
+  padding: 8px 10px;
   border: 1px solid #e5e7eb;
   background: #ffffff;
   border-radius: 8px;
   text-align: left;
 }
 
+.state-list-item:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
 .state-list-item.selected {
   border-color: #2563eb;
   background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
 }
 
 .state-name {
@@ -546,9 +638,28 @@ button:disabled {
 .state-meta {
   display: flex;
   align-items: center;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 5px;
   color: #6b7280;
   font-size: 12px;
+}
+
+.state-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 18px;
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.state-meta-badge.is-warning {
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .flow-shell {
@@ -558,6 +669,11 @@ button:disabled {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   position: relative;
+}
+
+.spec-workspace-shell .flow-shell {
+  height: 100%;
+  min-height: 0;
 }
 
 .nice-toolbar {
@@ -3328,6 +3444,28 @@ button:disabled {
 
 .global-search-panel {
   min-height: 180px;
+}
+
+.spec-workspace-shell .global-search-panel {
+  min-height: 0;
+  max-height: 190px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.spec-workspace-shell .global-search-panel .section-header {
+  margin-bottom: 8px;
+}
+
+.spec-workspace-shell .global-search-panel .search-input {
+  margin-bottom: 8px;
+}
+
+.spec-workspace-shell .global-search-panel .global-results {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
 }
 
 .mode-panel .segmented-control button {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import UploadPanel from "./components/UploadPanel";
 import StateList from "./components/StateList";
@@ -73,6 +73,14 @@ export default function App() {
   });
   const canvasRef = useRef(null);
 
+  useEffect(() => {
+    if (workspaceMode !== "spec" || viewMode === "uxAnalysisView" || focusRequest) return;
+
+    window.requestAnimationFrame(() => {
+      canvasRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+    });
+  }, [workspaceMode, selectedState, viewMode, showChangeColors, showBiMarkings, showBreadcrumb, layoutVersion, focusRequest]);
+
   const comparison = useMemo(
     () => compareSpecs(comparisonPreviousData, comparisonNextData),
     [comparisonPreviousData, comparisonNextData],
@@ -136,6 +144,12 @@ export default function App() {
       setSearch("");
       setGlobalSearch("");
       setFilter("all");
+      setSidebarAccordions((current) => ({
+        ...current,
+        upload: false,
+        states: true,
+        diagnostics: false,
+      }));
     } catch (caught) {
       setError(caught?.message ?? "Nao foi possivel processar o arquivo.");
     } finally {
@@ -180,6 +194,12 @@ export default function App() {
         setSearch("");
         setGlobalSearch("");
         setFilter("all");
+        setSidebarAccordions((current) => ({
+          ...current,
+          upload: false,
+          states: true,
+          diagnostics: false,
+        }));
       }
     } catch (caught) {
       setError(caught?.message ?? "Nao foi possivel processar o arquivo.");
@@ -523,7 +543,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="app-shell">
+      <div className={`app-shell ${workspaceMode === "spec" ? "spec-workspace-shell" : "nice-workspace-shell"}`}>
         {isLoading && <LoadingOverlay fileName={loadingFileName} progress={loadingProgress} title={loadingTitle} />}
         <WorkspaceModeSwitch workspaceMode={workspaceMode} onChange={setWorkspaceMode} />
 

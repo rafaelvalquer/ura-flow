@@ -381,6 +381,7 @@ export default function NiceScriptWorkspace() {
       };
     });
     setSelectedActionId(actionId);
+    setFocusActionRequest({ actionId, nonce: Date.now() });
     setCopyStatus('');
   }
 
@@ -428,6 +429,15 @@ export default function NiceScriptWorkspace() {
           return { ...action, defaultNextAction: branch };
         }
         if (config.type === 'case') {
+          if (action.action === 'MENU') {
+            const parameters = [...(action.parameters ?? [])];
+            parameters[7] = config.responseVariable || parameters[7] || 'MRES';
+            return {
+              ...action,
+              parameters,
+              cases: upsertBranch(action.cases ?? [], branch),
+            };
+          }
           return { ...action, cases: upsertBranch(action.cases ?? [], branch) };
         }
         return { ...action, branches: upsertBranch(action.branches ?? [], branch) };
@@ -1342,6 +1352,7 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
   const selectedOption = connectionOptions.find((option) => option.key === selectedKey) ?? connectionOptions[0] ?? null;
   const [caseValue, setCaseValue] = useState(selectedOption?.label ?? '');
   const [caseIndex, setCaseIndex] = useState(selectedOption?.index ?? 0);
+  const [responseVariable, setResponseVariable] = useState(selectedOption?.responseVariable ?? sourceAction?.parameters?.[7] ?? 'MRES');
 
   function selectOption(key) {
     const option = connectionOptions.find((item) => item.key === key);
@@ -1349,6 +1360,7 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
     if (option) {
       setCaseValue(option.label);
       setCaseIndex(option.index);
+      setResponseVariable(option.responseVariable ?? sourceAction?.parameters?.[7] ?? 'MRES');
     }
   }
 
@@ -1358,6 +1370,7 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
       type: selectedOption.type,
       label: selectedOption.editable ? caseValue : selectedOption.label,
       index: selectedOption.editable ? caseIndex : selectedOption.index,
+      responseVariable: selectedOption.responseVariableEditable ? responseVariable : undefined,
     });
   }
 
@@ -1385,7 +1398,10 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
               />
               {selectedOption?.editable ? (
                 <div className="nice-form-grid">
-                  <Field label="Valor do case" value={caseValue} onChange={setCaseValue} />
+                  {selectedOption.responseVariableEditable ? (
+                    <Field label="Variavel de resposta" value={responseVariable} onChange={setResponseVariable} />
+                  ) : null}
+                  <Field label="Valor da saida" value={caseValue} onChange={setCaseValue} />
                   <Field label="Index" value={caseIndex} onChange={setCaseIndex} />
                 </div>
               ) : (
@@ -1403,7 +1419,7 @@ function ConnectionModal({ connection, sourceAction, targetAction, onCancel, onA
         </div>
         <footer className="nice-wizard-footer">
           <button className="ghost-button" type="button" onClick={onCancel}>Cancelar</button>
-          <button className="secondary-button" type="button" onClick={applySelectedConnection} disabled={!selectedOption}>Aplicar conexao</button>
+          <button className="secondary-button" type="button" onClick={applySelectedConnection} disabled={!selectedOption || (selectedOption.editable && !String(caseValue).trim())}>Aplicar conexao</button>
         </footer>
       </section>
     </div>
@@ -3136,9 +3152,21 @@ function getAvailableConnectionOptions(sourceAction) {
   }
 
   if (sourceAction.action === 'MENU') {
+    const nextCase = nextCaseValue(getDirectMenuCaseBranches(sourceAction));
     return [
       makeDefaultOption(sourceAction, 'DefaultNextAction', 'Caminho quando o cliente digita uma opcao.'),
       makeBranchOption(sourceAction, 'Timeout', 2, 'Branch Timeout', 'Caminho quando nao ha digitacao dentro do timeout.'),
+      {
+        key: `menu-case-${nextCase}`,
+        type: 'case',
+        label: nextCase,
+        index: nextCaseIndex(getDirectMenuCaseBranches(sourceAction)),
+        selectLabel: 'Nova saida customizada',
+        description: 'Cria uma saida do MENU pelo valor digitado na variavel de resposta.',
+        editable: true,
+        responseVariableEditable: true,
+        responseVariable: sourceAction.parameters?.[7] || 'MRES',
+      },
     ].filter(Boolean);
   }
 

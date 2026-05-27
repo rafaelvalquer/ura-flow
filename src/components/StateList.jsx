@@ -17,14 +17,11 @@ export default function StateList({
   onSelectState,
   search,
   onSearchChange,
-  filter,
-  onFilterChange,
   isOpen = true,
   onToggle,
 }) {
   const filteredStates = states
-    .filter((state) => state.sheetName.toLowerCase().includes(search.toLowerCase()))
-    .filter((state) => matchesFilter(state, sheetNames, filter));
+    .filter((state) => state.sheetName.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <AccordionSection
@@ -34,24 +31,15 @@ export default function StateList({
       isOpen={isOpen}
       onToggle={onToggle}
     >
+      <div className="state-list-summary">
+        <span>{filteredStates.length} de {states.length} estados</span>
+      </div>
       <input
         className="search-input"
         placeholder="Buscar estado"
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
-      <div className="filter-grid">
-        {FILTERS.map(([value, label]) => (
-          <button
-            key={value}
-            className={`filter-chip ${filter === value ? 'active' : ''}`}
-            type="button"
-            onClick={() => onFilterChange(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       <div className="state-list">
         {filteredStates.map((state) => {
           const summary = summarizeState(state, sheetNames);
@@ -62,12 +50,22 @@ export default function StateList({
               type="button"
               onClick={() => onSelectState(state.sheetName)}
             >
-              <span className="state-name">{state.sheetName}</span>
+              <span className="state-name" title={state.sheetName}>{state.sheetName}</span>
               <span className="state-meta">
-                <CheckCircle2 size={13} /> {state.transitions.length}
-                <PhoneOff size={13} /> {summary.terminal}
-                <Headphones size={13} /> {summary.transfer}
-                {summary.unknown > 0 && <AlertTriangle size={13} />}
+                <span className="state-meta-badge" title="Transicoes">
+                  <CheckCircle2 size={13} /> {state.transitions.length}
+                </span>
+                <span className="state-meta-badge" title="Tchau">
+                  <PhoneOff size={13} /> {summary.terminal}
+                </span>
+                <span className="state-meta-badge" title="Transferencias">
+                  <Headphones size={13} /> {summary.transfer}
+                </span>
+                {summary.unknown > 0 && (
+                  <span className="state-meta-badge is-warning" title="Destino nao encontrado">
+                    <AlertTriangle size={13} /> {summary.unknown}
+                  </span>
+                )}
               </span>
             </button>
           );

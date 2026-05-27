@@ -45,6 +45,7 @@ export default function NiceScriptCanvas({
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
   const initializedRef = useRef(false);
+  const handledFocusNonceRef = useRef(null);
   const { fitView, getViewport, screenToFlowPosition, setCenter, setViewport } = useReactFlow();
 
   useEffect(() => {
@@ -54,19 +55,22 @@ export default function NiceScriptCanvas({
 
   useEffect(() => {
     if (!nodes.length) return;
+    if (initializedRef.current) return;
     window.requestAnimationFrame(() => {
-      const duration = initializedRef.current ? 180 : 320;
+      const duration = 320;
       Promise.resolve(fitView({ padding: 0.22, duration })).then(() => {
-        setViewport(getTopAlignedViewport(nodes, getViewport()), { duration: initializedRef.current ? 180 : 320 });
+        setViewport(getTopAlignedViewport(nodes, getViewport()), { duration });
       });
       initializedRef.current = true;
     });
-  }, [layoutKey, fitView, getViewport, setViewport]);
+  }, [nodes, fitView, getViewport, setViewport]);
 
   useEffect(() => {
     const actionId = Number(focusActionRequest?.actionId);
     if (!actionId) return;
-    const node = flowNodes.find((item) => Number(item.data?.actionId) === actionId);
+    const focusNonce = focusActionRequest?.nonce ?? null;
+    if (handledFocusNonceRef.current === focusNonce) return;
+    const node = nodes.find((item) => Number(item.data?.actionId) === actionId);
     if (!node) return;
 
     const width = node.measured?.width ?? node.width ?? 220;
@@ -77,7 +81,8 @@ export default function NiceScriptCanvas({
       node.position.y + height / 2,
       { zoom: Math.max(Number(viewport.zoom) || 1, 1), duration: 360 },
     );
-  }, [focusActionRequest?.nonce, focusActionRequest?.actionId, getViewport, setCenter]);
+    handledFocusNonceRef.current = focusActionRequest?.nonce ?? null;
+  }, [focusActionRequest?.nonce, focusActionRequest?.actionId, nodes, getViewport, setCenter]);
 
   useEffect(() => {
     function handleKeyDown(event) {
