@@ -26,6 +26,7 @@ import { organizeNiceScript } from '../services/niceLayout.js';
 import { generateNiceDocumentation } from '../services/niceDocumentationGenerator.js';
 import { buildNiceDocumentationFlow } from '../services/niceDocumentationFlowBuilder.js';
 import { normalizeDocumentationGraph } from '../services/niceDocumentationGraphNormalizer.js';
+import { findDirectMenuCaseBranch, getDirectMenuCaseBranches, getDirectMenuCaseKeys } from '../services/niceMenuRouting.js';
 
 const DRAFT_STORAGE_KEY = 'ura-flow:nice-script:draft';
 const CLONES_STORAGE_KEY = 'ura-flow:nice-script:clones';
@@ -1962,7 +1963,7 @@ function SimulationNodeInspector({
 
   const actionType = action.action;
   const responseVariable = action.parameters?.[7] || 'MRES';
-  const menuOptions = getMenuMaskOptions(actions);
+  const menuOptions = getMenuMaskOptions(actions, action);
   const rawMenuOutputValue = nodeOutput.value ?? nodeOutput.customValue ?? '';
   const menuOutputValue = String(rawMenuOutputValue);
   const menuSelectionValue = nodeOutput.mode === 'timeout'
@@ -3498,10 +3499,26 @@ function chooseSimulationNext(action, actions, variables, nodeOutput = {}) {
 
   if (action.action === 'MENU') {
     const isTimeout = nodeOutput.mode === 'timeout';
-    const branch = isTimeout
-      ? (action.branches ?? []).find((item) => /timeout/i.test(item.text))
-      : action.defaultNextAction;
-    const label = isTimeout ? (branch?.text || 'Timeout') : 'Default';
+    if (isTimeout) {
+      const branch = (action.branches ?? []).find((item) => /timeout/i.test(item.text));
+      const label = branch?.text || 'Timeout';
+      return branch ? edgeChoice(branch, label) : { reason: `${action.caption}: saida de Timeout nao configurada.` };
+    }
+
+    const directCases = getDirectMenuCaseBranches(action);
+    if (directCases.length) {
+      const responseVariable = action.parameters?.[7] || 'MRES';
+      const responseValue = variables[responseVariable] ?? variables.MRES ?? variables.mres ?? '';
+      const branch = findDirectMenuCaseBranch(action, responseValue);
+      if (branch) return edgeChoice(branch, branch.text || 'Case');
+      const warning = responseValue ? `${action.caption}: ${responseVariable} "${responseValue}" nao existe nos CaseBranches.` : '';
+      return action.defaultNextAction
+        ? edgeChoice(action.defaultNextAction, 'Default', warning)
+        : { reason: `${action.caption}: MENU sem CaseBranch ${responseValue || '(vazio)'} e sem default.`, warning };
+    }
+
+    const branch = action.defaultNextAction;
+    const label = 'Default';
     return branch ? edgeChoice(branch, label) : { reason: `${action.caption}: saida de MENU nao configurada.` };
   }
 
@@ -3626,9 +3643,11 @@ function findMenuMask(actions) {
   return mask.split('-').map((item) => item.trim()).filter(Boolean);
 }
 
-function getMenuMaskOptions(actions) {
+function getMenuMaskOptions(actions, menu = null) {
   const mask = findMenuMask(actions);
   if (mask.length > 0) return mask;
+  const directMenuOptions = getDirectMenuCaseKeys(menu);
+  if (directMenuOptions.length > 0) return [...new Set(directMenuOptions)];
   const caseOptions = actions
     .flatMap((action) => action.cases ?? [])
     .map((item) => String(item.text ?? '').trim())

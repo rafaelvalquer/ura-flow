@@ -1,4 +1,4 @@
-import { BadgeCheck, GitBranch, ImageDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
+import { BadgeCheck, FileDiff, GitBranch, ImageDown, LayoutGrid, Maximize2, Minimize2, Palette, RotateCcw } from 'lucide-react';
 
 export default function Toolbar({
   fileName,
@@ -14,10 +14,12 @@ export default function Toolbar({
   onToggleFocusMode,
   onOrganize,
   onExportImage,
+  onCompareSpecNice,
   onClear,
   canExport,
   canOrganize,
   canHighlightChanges,
+  canCompareSpecNice,
 }) {
   return (
     <header className="app-toolbar">
@@ -66,6 +68,10 @@ export default function Toolbar({
         <button className="secondary-button" type="button" onClick={onExportImage} disabled={!canExport}>
           <ImageDown size={16} />
           Exportar PNG
+        </button>
+        <button className="secondary-button" type="button" onClick={onCompareSpecNice} disabled={!canCompareSpecNice}>
+          <FileDiff size={16} />
+          Comparador Spec x NICE
         </button>
         <button className="ghost-button" type="button" onClick={onClear}>
           <RotateCcw size={16} />

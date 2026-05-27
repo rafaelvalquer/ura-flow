@@ -12,6 +12,7 @@ import {
   Variable,
 } from 'lucide-react';
 import { NICE_ACTION_LABELS } from '../../services/niceScriptModel.js';
+import { getDirectMenuCaseBranches } from '../../services/niceMenuRouting.js';
 
 const icons = {
   BEGIN: Play,
@@ -29,11 +30,15 @@ const icons = {
 
 export default function NiceActionNode({ data, selected }) {
   const Icon = icons[data.action] ?? Braces;
-  const branchCount = (data.branches?.length ?? 0) + (data.cases?.length ?? 0) + (data.defaultNextAction ? 1 : 0);
+  const directMenuCases = getDirectMenuCaseBranches(data);
+  const visibleCases = data.action === 'MENU' ? directMenuCases : (data.cases ?? []);
+  const branchCount = (data.branches?.length ?? 0) + (visibleCases.length ?? 0) + (data.defaultNextAction ? 1 : 0);
   const isCaseAction = data.action === 'CASE';
+  const isDirectMenuAction = data.action === 'MENU' && directMenuCases.length > 0;
   const isIfAction = data.action === 'IF';
   const isLoopAction = data.action === 'LOOP';
   const caseOutputs = isCaseAction ? makeCaseOutputs(data) : [];
+  const menuCaseOutputs = isDirectMenuAction ? makeCaseOutputs({ ...data, cases: directMenuCases, defaultNextAction: null }) : [];
   const ifOutputs = isIfAction ? makeIfOutputs(data) : [];
   const loopOutputs = isLoopAction ? makeLoopOutputs(data) : [];
   const decisionSummary = makeDecisionSummary(data);
@@ -73,6 +78,23 @@ export default function NiceActionNode({ data, selected }) {
             </div>
           ))}
         </div>
+      ) : isDirectMenuAction ? (
+        <>
+          <Handle type="source" position={Position.Right} />
+          <div className="nice-case-output-list">
+            {menuCaseOutputs.map((output) => (
+              <div className="nice-case-output-row" key={output.id}>
+                <span>{output.label}</span>
+                <Handle
+                  className="nice-case-output-handle"
+                  id={output.id}
+                  type="source"
+                  position={Position.Right}
+                />
+              </div>
+            ))}
+          </div>
+        </>
       ) : isIfAction ? (
         <div className="nice-if-output-list">
           {ifOutputs.map((output) => (

@@ -8,6 +8,10 @@ const HEADER_ALIASES = {
   prompt: ['e ouve o prompt', 'ouve o prompt', 'prompt'],
   observation: ['observacao', 'observações', 'observacao'],
   bi: ['marcacao de b i', 'marcacao de bi', 'marcação de b i', 'marcacao b i', 'bi'],
+  audio: ['audio', 'audio prompt', 'arquivo audio', 'arquivo de audio'],
+  scriptpoint: ['scriptpoint', 'script point', 'script_point', 'ponto script', 'ponto de script'],
+  nextStep: ['next step', 'next_step', 'proximo estado tecnico', 'proximo fluxo tecnico', 'pathstep'],
+  transferCode: ['transfercode', 'transfer code', 'codigo transferencia', 'codigo de transferencia'],
 };
 
 export async function parseExcelFile(file, onProgress = () => {}) {
@@ -31,7 +35,7 @@ export async function parseExcelFile(file, onProgress = () => {}) {
   await yieldToBrowser();
 
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, cellStyles: true });
-  const sheetNames = workbook.SheetNames;
+  const sheetNames = workbook.SheetNames.filter((sheetName) => !isIgnoredSheetName(sheetName));
   const states = [];
   const warnings = [];
   const totalSheets = sheetNames.length;
@@ -102,6 +106,10 @@ function yieldToBrowser() {
   });
 }
 
+function isIgnoredSheetName(sheetName) {
+  return normalizeKey(sheetName) === 'versionamento';
+}
+
 function findDecisionTable(rows) {
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex] ?? [];
@@ -114,7 +122,17 @@ function findDecisionTable(rows) {
 }
 
 function mapHeaderColumns(row) {
-  const mapped = { result: -1, to: -1, prompt: -1, observation: -1, bi: -1 };
+  const mapped = {
+    result: -1,
+    to: -1,
+    prompt: -1,
+    observation: -1,
+    bi: -1,
+    audio: -1,
+    scriptpoint: -1,
+    nextStep: -1,
+    transferCode: -1,
+  };
   row.forEach((cell, index) => {
     const key = normalizeKey(cell);
     Object.entries(HEADER_ALIASES).forEach(([field, aliases]) => {
@@ -128,6 +146,7 @@ function mapHeaderColumns(row) {
 
 function parseStateRows(sheetName, sheet, rows, table, warnings) {
   const transitions = [];
+  const audioCatalog = extractAudioCatalog(rows, table.headerRow);
   const root = createDecisionNode({
     id: `${makeId(sheetName)}-root`,
     text: sheetName,
@@ -153,6 +172,10 @@ function parseStateRows(sheetName, sheet, rows, table, warnings) {
     const prompt = normalizeText(getCell(row, columns.prompt));
     const observation = normalizeText(getCell(row, columns.observation));
     const bi = normalizeText(getCell(row, columns.bi));
+    const audio = normalizeText(getCell(row, columns.audio));
+    const scriptpoint = normalizeText(getCell(row, columns.scriptpoint));
+    const nextStep = normalizeText(getCell(row, columns.nextStep));
+    const transferCode = normalizeText(getCell(row, columns.transferCode));
     const parsedCondition = parseCondition(rawResult);
 
     if (!parsedCondition.text && !destination && !prompt) continue;
@@ -166,6 +189,10 @@ function parseStateRows(sheetName, sheet, rows, table, warnings) {
           prompt,
           observation,
           bi,
+          audio,
+          scriptpoint,
+          nextStep,
+          transferCode,
           changeColor,
           path: activePath.map((node) => node.text),
         }));
@@ -187,6 +214,10 @@ function parseStateRows(sheetName, sheet, rows, table, warnings) {
       prompt,
       observation,
       bi,
+      audio,
+      scriptpoint,
+      nextStep,
+      transferCode,
       changeColor,
       isDirective: internalDestination,
     });
@@ -222,6 +253,10 @@ function parseStateRows(sheetName, sheet, rows, table, warnings) {
         prompt,
         observation,
         bi,
+        audio,
+        scriptpoint,
+        nextStep,
+        transferCode,
         changeColor,
         path: node.path,
       });
@@ -238,7 +273,49 @@ function parseStateRows(sheetName, sheet, rows, table, warnings) {
     sheetName,
     transitions,
     decisionTree: root.children,
+    audioCatalog,
   };
+}
+
+function extractAudioCatalog(rows, decisionHeaderRow) {
+  let audioHeaderRow = -1;
+
+  for (let rowIndex = 0; rowIndex < decisionHeaderRow; rowIndex += 1) {
+    const row = rows[rowIndex] ?? [];
+    const first = normalizeKey(row[0]);
+    const second = normalizeKey(row[1]);
+    if (first.includes('nome da gravacao') && second.includes('texto')) {
+      audioHeaderRow = rowIndex;
+      break;
+    }
+  }
+
+  if (audioHeaderRow < 0) return [];
+
+  const catalog = [];
+  for (let rowIndex = audioHeaderRow + 1; rowIndex < decisionHeaderRow; rowIndex += 1) {
+    const row = rows[rowIndex] ?? [];
+    const fileName = normalizeText(row[0]);
+    const text = normalizeText(row[1]);
+    if (!fileName) continue;
+    if (isNonAudioCatalogRow(fileName)) continue;
+    catalog.push({
+      fileName,
+      text,
+      rowNumber: rowIndex + 1,
+    });
+  }
+
+  return catalog;
+}
+
+function isNonAudioCatalogRow(value) {
+  const key = normalizeKey(value);
+  return key === 'obs'
+    || key.startsWith('exemplo ')
+    || key.includes('exemplos de concatenacao')
+    || key.includes('nome do estado')
+    || key.includes('estados anteriores');
 }
 
 function parseCondition(value) {
@@ -268,6 +345,10 @@ function createDecisionNode({
   prompt = '',
   observation = '',
   bi = '',
+  audio = '',
+  scriptpoint = '',
+  nextStep = '',
+  transferCode = '',
   changeColor = '',
   isDirective = false,
 }) {
@@ -283,6 +364,10 @@ function createDecisionNode({
     prompt,
     observation,
     bi,
+    audio,
+    scriptpoint,
+    nextStep,
+    transferCode,
     changeColor,
     hasChangeColor: Boolean(changeColor),
     isDirective,
@@ -290,7 +375,20 @@ function createDecisionNode({
   };
 }
 
-function createTransition({ sheetName, rowNumber, destination, prompt, observation, bi, changeColor = '', path }) {
+function createTransition({
+  sheetName,
+  rowNumber,
+  destination,
+  prompt,
+  observation,
+  bi,
+  audio = '',
+  scriptpoint = '',
+  nextStep = '',
+  transferCode = '',
+  changeColor = '',
+  path,
+}) {
   const biMarking = parseBiMarking(bi);
   return {
     id: `${makeId(sheetName)}-${rowNumber}`,
@@ -299,6 +397,10 @@ function createTransition({ sheetName, rowNumber, destination, prompt, observati
     conditions: path.filter(Boolean),
     prompt,
     observation,
+    audio,
+    scriptpoint,
+    nextStep,
+    transferCode,
     bi,
     biCode: biMarking.code,
     biDescription: biMarking.description,

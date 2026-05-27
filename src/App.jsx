@@ -10,6 +10,7 @@ import ComparisonPanel from "./components/ComparisonPanel";
 import UxReportPanel from "./components/UxReportPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import NiceScriptWorkspace from "./components/NiceScriptWorkspace";
+import SpecNiceComparisonModal from "./components/SpecNiceComparisonModal";
 import Toolbar from "./components/Toolbar";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
@@ -17,6 +18,8 @@ import { buildUxAnalysis } from "./services/uxAnalyzer.js";
 import { buildUxFlow } from "./services/uxFlowBuilder.js";
 import { compareSpecs } from "./services/compareSpecs.js";
 import { exportFlowToPng } from "./services/imageExporter.js";
+import { parseNiceXml } from "./services/niceXmlParser.js";
+import { compareSpecStateWithNiceScript } from "./services/specNiceComparator.js";
 import { normalizeKey } from "./utils/normalizeText.js";
 
 export default function App() {
@@ -32,6 +35,11 @@ export default function App() {
   const [uxAnalysisResult, setUxAnalysisResult] = useState(null);
   const [uxGraphResult, setUxGraphResult] = useState({ nodes: [], edges: [] });
   const [uxShortestPathActive, setUxShortestPathActive] = useState(false);
+  const [specNiceModalOpen, setSpecNiceModalOpen] = useState(false);
+  const [specNiceResult, setSpecNiceResult] = useState(null);
+  const [specNiceFileName, setSpecNiceFileName] = useState("");
+  const [specNiceError, setSpecNiceError] = useState("");
+  const [specNiceLoading, setSpecNiceLoading] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState("Lendo arquivo Excel");
   const [viewMode, setViewMode] = useState("stateView");
   const [search, setSearch] = useState("");
@@ -225,12 +233,20 @@ export default function App() {
     setShowBiMarkings(true);
     setShowBreadcrumb(true);
     setFocusMode(false);
+    clearSpecNiceComparison();
     setSidebarAccordions({
       upload: true,
       states: true,
       diagnostics: true,
       ux: true,
     });
+  }
+
+  function clearSpecNiceComparison() {
+    setSpecNiceResult(null);
+    setSpecNiceFileName("");
+    setSpecNiceError("");
+    setSpecNiceLoading(false);
   }
 
   function toggleSidebarAccordion(key) {
@@ -466,6 +482,45 @@ export default function App() {
     });
   }
 
+  async function handleSpecNiceFileSelected(file) {
+    const state = parsedData?.states?.find((item) => item.sheetName === selectedState);
+    if (!state) {
+      setSpecNiceError("Selecione um estado da Spec Excel antes de importar o XML NICE.");
+      return;
+    }
+
+    setSpecNiceLoading(true);
+    setSpecNiceError("");
+    setSpecNiceFileName(file.name);
+    try {
+      const text = await file.text();
+      const niceScript = parseNiceXml(text, file.name);
+      setSpecNiceResult(compareSpecStateWithNiceScript(state, niceScript));
+    } catch (caught) {
+      setSpecNiceResult(null);
+      setSpecNiceError(caught?.message ?? "Nao foi possivel comparar a spec com o XML NICE.");
+    } finally {
+      setSpecNiceLoading(false);
+    }
+  }
+
+  function handleSpecNiceFocus(change) {
+    const transition = change?.expected?.transition;
+    if (!transition) return;
+    setSpecNiceModalOpen(false);
+    setSelectedState(transition.sheetName);
+    clearUxAnalysis();
+    setViewMode("detailedView");
+    setSelection(null);
+    setFocusRequest({
+      kind: "spec-nice-comparison",
+      sheetName: transition.sheetName,
+      rowNumber: transition.rowNumber,
+      transitionId: transition.id,
+      nonce: Date.now(),
+    });
+  }
+
   return (
     <ReactFlowProvider>
       <div className="app-shell">
@@ -490,10 +545,15 @@ export default function App() {
               onToggleFocusMode={() => setFocusMode((value) => !value)}
               onOrganize={handleOrganize}
               onExportImage={handleExportImage}
+              onCompareSpecNice={() => {
+                clearSpecNiceComparison();
+                setSpecNiceModalOpen(true);
+              }}
               onClear={handleClear}
               canExport={graph.nodes.length > 0}
               canOrganize={graph.nodes.length > 0}
               canHighlightChanges={graph.nodes.length > 0}
+              canCompareSpecNice={Boolean(parsedData && selectedState)}
             />
 
             <div className={`workspace-grid ${isDetailsCollapsed ? "details-collapsed" : ""} ${isFocusMode ? "focus-mode" : ""}`}>
@@ -632,6 +692,19 @@ export default function App() {
               )}
             </div>
           </>
+        )}
+
+        {workspaceMode === "spec" && specNiceModalOpen && (
+          <SpecNiceComparisonModal
+            stateName={selectedState}
+            result={specNiceResult}
+            fileName={specNiceFileName}
+            error={specNiceError}
+            isLoading={specNiceLoading}
+            onClose={() => setSpecNiceModalOpen(false)}
+            onFileSelected={handleSpecNiceFileSelected}
+            onFocusSpec={handleSpecNiceFocus}
+          />
         )}
       </div>
     </ReactFlowProvider>

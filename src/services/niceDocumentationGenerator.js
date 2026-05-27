@@ -1,3 +1,5 @@
+import { getDirectMenuCaseBranches, hasDirectMenuCaseBranches } from './niceMenuRouting.js';
+
 export function generateNiceDocumentation(script, validation = { errors: [], warnings: [] }) {
   const actions = [...(script?.actions ?? [])].sort((a, b) => Number(a.actionId) - Number(b.actionId));
   const actionsById = new Map(actions.map((action) => [Number(action.actionId), action]));
@@ -77,6 +79,7 @@ function appendMenus(lines, actions, actionsById) {
     const config = findNearestConfig(menu, actions);
     const configVars = parseAssignments(config?.parameters?.[0] ?? '');
     const mask = configVars.MASCARA ?? findMaskInActions(actions);
+    const directCases = getDirectMenuCaseBranches(menu);
     const locate = findConnectedAction(menu.defaultNextAction, actionsById, 'LOCATE');
     const timeoutBranch = (menu.branches ?? []).find((branch) => /timeout/i.test(branch.text));
 
@@ -86,6 +89,9 @@ function appendMenus(lines, actions, actionsById) {
     lines.push(`- Timeout: ${menu.parameters?.[5] || 'nao informado'}`);
     lines.push(`- Interdigit: ${menu.parameters?.[6] || 'nao informado'}`);
     lines.push(`- Mascara: ${mask || 'nao encontrada'}`);
+    if (directCases.length) {
+      lines.push(`- CaseBranches diretos: ${directCases.map((branch) => `${branch.text}->#${branch.actionId}`).join(', ')}`);
+    }
     lines.push(`- CONFIG_MENU: ${config ? formatActionRef(config) : 'nao encontrado'}`);
     lines.push(`- LOCATE: ${locate ? formatActionRef(locate) : 'nao encontrado'}`);
     lines.push(`- Timeout/SIL: ${timeoutBranch ? formatBranch(timeoutBranch, actionsById) : 'nao configurado'}`);
@@ -101,6 +107,22 @@ function appendMenus(lines, actions, actionsById) {
 function appendMenuOptions(lines, actions, actionsById) {
   addSection(lines, '## Opcoes de menu');
   const rows = [];
+
+  actions.filter((action) => action.action === 'MENU').forEach((menu) => {
+    getDirectMenuCaseBranches(menu).forEach((branch) => {
+      const target = actionsById.get(Number(branch.actionId));
+      const output = summarizeActionOutput(target);
+      rows.push([
+        branch.text || '(vazio)',
+        `${formatActionRef(menu)} CaseBranches`,
+        target ? formatActionRef(target) : `#${branch.actionId} nao encontrado`,
+        output.audio || '',
+        output.nextStep || '',
+        output.scriptpoint || '',
+        output.transferCode || '',
+      ]);
+    });
+  });
 
   actions.filter((action) => action.action === 'CASE').forEach((caseAction) => {
     (caseAction.cases ?? []).forEach((caseBranch) => {
@@ -299,7 +321,7 @@ function appendGaps(lines, actions, actionsById, validation) {
       }
     });
     if (action.action === 'IF' && !(action.branches ?? []).length) gaps.push(`${formatActionRef(action)} IF sem branches.`);
-    if (action.action === 'MENU' && !findMaskInActions(actions)) gaps.push(`${formatActionRef(action)} MENU sem mascara detectada.`);
+    if (action.action === 'MENU' && !findMaskInActions(actions) && !hasDirectMenuCaseBranches(action)) gaps.push(`${formatActionRef(action)} MENU sem mascara detectada.`);
     if (action.action === 'SNIPPET' && isMostlyOutputSnippet(action) && !/NEXT_STEP/i.test(action.parameters?.[0] ?? '') && !/MAX_REJ|MAX_SIL/i.test(action.caption)) {
       gaps.push(`${formatActionRef(action)} snippet de saida sem NEXT_STEP.`);
     }
@@ -329,10 +351,11 @@ function pushTable(lines, headers, rows) {
 }
 
 function getActionOutgoing(action) {
+  const cases = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
   return [
     action.defaultNextAction ? { ...action.defaultNextAction, label: 'Default' } : null,
     ...(action.branches ?? []).map((branch) => ({ ...branch, label: branch.text || `Branch ${branch.index}` })),
-    ...(action.cases ?? []).map((branch) => ({ ...branch, label: `Case ${branch.text}` })),
+    ...cases.map((branch) => ({ ...branch, label: `Case ${branch.text}` })),
   ].filter(Boolean);
 }
 

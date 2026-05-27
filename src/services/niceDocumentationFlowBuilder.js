@@ -1,3 +1,5 @@
+import { getDirectMenuCaseBranches } from './niceMenuRouting.js';
+
 export function buildNiceDocumentationFlow(script) {
   const actions = [...(script?.actions ?? [])].sort((a, b) => Number(a.actionId) - Number(b.actionId));
   const actionsById = new Map(actions.map((action) => [Number(action.actionId), action]));
@@ -12,6 +14,37 @@ export function buildNiceDocumentationFlow(script) {
     docNodes.push(node);
     actionToDoc.set(Number(action.actionId), node.id);
   });
+
+  actions
+    .filter((action) => action.action === 'MENU')
+    .forEach((menu) => {
+      getDirectMenuCaseBranches(menu).forEach((branch, index) => {
+        const target = actionsById.get(Number(branch.actionId));
+        const output = summarizeActionOutput(target);
+        const node = makeDocNode({
+          id: `menu-option-${menu.actionId}-${index}`,
+          type: 'option',
+          title: `Opcao ${branch.text || index + 1}`,
+          subtitle: output.nextStep || output.audio || target?.caption || 'Destino nao interpretado',
+          actionIds: [Number(menu.actionId), Number(branch.actionId)].filter(Boolean),
+          details: compactDetails([
+            ['DTMF', branch.text],
+            ['Origem', 'MENU CaseBranches'],
+            ['Audio', output.audio],
+            ['NEXT_STEP', output.nextStep],
+            ['Scriptpoint', output.scriptpoint],
+            ['TransferCode', output.transferCode],
+          ]),
+          column: 2,
+          row: docNodes.length,
+        });
+        docNodes.push(node);
+        docEdges.push(makeDocEdge(actionToDoc.get(Number(menu.actionId)), node.id, `Case ${branch.text}`));
+        if (target && actionToDoc.has(Number(target.actionId))) {
+          docEdges.push(makeDocEdge(node.id, actionToDoc.get(Number(target.actionId)), 'Destino'));
+        }
+      });
+    });
 
   actions
     .filter((action) => action.action === 'CASE')
@@ -218,7 +251,9 @@ function buildMainPaths(actions, actionsById) {
       .filter((action) => action.action === 'SNIPPET')
       .flatMap((action) => extractSwitchCases(action.parameters?.[0] ?? ''))
       .map((item) => `Opcao ${item.caseValue} -> ${item.output.nextStep || item.output.audio || 'logica em snippet'}`);
-    const options = actions
+    const options = getDirectMenuCaseBranches(menu)
+      .map((branch) => `Opcao ${branch.text} -> ${targetName(branch, actionsById)}`);
+    const caseOptions = actions
       .filter((action) => action.action === 'CASE')
       .flatMap((action) => action.cases ?? [])
       .map((branch) => `Opcao ${branch.text} -> ${targetName(branch, actionsById)}`);
@@ -229,6 +264,7 @@ function buildMainPaths(actions, actionsById) {
         `Resposta: ${menu.parameters?.[7] || 'MRES'}`,
         `Timeout: ${targetName((menu.branches ?? []).find((branch) => /timeout/i.test(branch.text)), actionsById)}`,
         ...options,
+        ...caseOptions,
         ...switchOptions,
       ].filter(Boolean),
     });
@@ -259,10 +295,11 @@ function buildMainPaths(actions, actionsById) {
 }
 
 function getOutgoing(action) {
+  const cases = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
   return [
     action.defaultNextAction ? { ...action.defaultNextAction, label: 'Default' } : null,
     ...(action.branches ?? []).map((branch) => ({ ...branch, label: branch.text || `Branch ${branch.index}` })),
-    ...(action.cases ?? []).map((branch) => ({ ...branch, label: branch.text || 'Case' })),
+    ...cases.map((branch) => ({ ...branch, label: branch.text || 'Case' })),
   ].filter(Boolean);
 }
 

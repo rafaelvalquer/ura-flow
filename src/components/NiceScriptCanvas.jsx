@@ -13,6 +13,7 @@ import {
 } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
 import NiceActionNode from './nodes/NiceActionNode.jsx';
+import { getDirectMenuCaseBranches } from '../services/niceMenuRouting.js';
 
 const nodeTypes = {
   niceActionNode: NiceActionNode,
@@ -241,7 +242,8 @@ function makeNiceEdges(script, simulatedEdgeIds) {
       edges.push(makeEdge(action, branch, branch.text || `Branch ${branch.index}`, 'nice-edge-branch', 'branch', simulatedEdgeIds));
     });
 
-    (action.cases ?? []).forEach((branch) => {
+    const caseBranches = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
+    caseBranches.forEach((branch) => {
       if (!actionsById.has(Number(branch.actionId))) return;
       edges.push(makeEdge(action, branch, branch.text || 'Case', 'nice-edge-case', 'case', simulatedEdgeIds));
     });
@@ -351,7 +353,8 @@ function makeLayoutKey(script) {
       action.actionId,
       action.defaultNextAction?.actionId ?? '',
       (action.branches ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
-      (action.cases ?? []).map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
+      (action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []))
+        .map((branch) => `${branch.actionId}:${branch.index}:${branch.text}`).join(','),
     ].join('|'))
     .join(';');
 }

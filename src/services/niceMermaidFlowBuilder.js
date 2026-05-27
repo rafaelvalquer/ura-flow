@@ -1,3 +1,5 @@
+import { getDirectMenuCaseBranches } from './niceMenuRouting.js';
+
 export function buildNiceMermaidDiagram(script, documentationFlow = {}, options = {}) {
   const journey = buildMermaidJourney(script, options);
   if (journey.nodes.length) {
@@ -318,6 +320,26 @@ function buildDetailedMenuJourney(actions, actionsById, menus) {
 function collectDetailedMenuOptions(actions, actionsById, range, menu) {
   const optionsByKey = new Map();
   const menuRoutingVariables = getMenuRoutingVariables(actions, range, menu);
+
+  getDirectMenuCaseBranches(menu).forEach((branch) => {
+    const key = normalizeOptionKey(branch.text);
+    if (!key) return;
+    const target = actionsById.get(Number(branch.actionId));
+    const current = optionsByKey.get(key) ?? {
+      key: branch.text || key,
+      output: {},
+      actionId: Number(target?.actionId ?? branch.actionId),
+      sourceActionIds: [],
+    };
+    current.key = branch.text || key;
+    current.caseTargetActionId = Number(branch.actionId);
+    current.caseActionId = Number(menu.actionId);
+    current.targetAction = target;
+    current.actionId = Number(target?.actionId ?? branch.actionId);
+    current.caseOutput = summarizeActionOutput(target);
+    current.sourceActionIds.push(Number(menu.actionId));
+    optionsByKey.set(key, current);
+  });
 
   actions
     .filter((action) => action.action === 'CASE' && actionInRange(Number(action.actionId), range))
@@ -1050,7 +1072,19 @@ function collectApiAttentionNodes(actions, nodes, edges) {
 function collectMenuOptions(actions, actionsById, range, menu) {
   const caseOptions = [];
   const switchOptions = [];
+  const directOptions = [];
   const menuRoutingVariables = getMenuRoutingVariables(actions, range, menu);
+
+  getDirectMenuCaseBranches(menu).forEach((branch) => {
+    const target = actionsById.get(Number(branch.actionId));
+    directOptions.push({
+      key: branch.text,
+      actionId: Number(target?.actionId ?? branch.actionId),
+      targetAction: target,
+      output: summarizeActionOutput(target),
+      source: 'MENU CaseBranches',
+    });
+  });
 
   actions
     .filter((action) => action.action === 'CASE' && actionInRange(Number(action.actionId), range))
@@ -1097,7 +1131,7 @@ function collectMenuOptions(actions, actionsById, range, menu) {
     return !(switchOption && isMeaningfulOption(switchOption) && isGenericNextStepOption(option));
   });
 
-  return dedupeOptions([...switchOptions, ...filteredCaseOptions]);
+  return dedupeOptions([...directOptions, ...switchOptions, ...filteredCaseOptions]);
 }
 
 function connectOptionDestination({ nodes, edges, outputNodes, optionNode, option, actionsById }) {
@@ -1711,10 +1745,11 @@ function mermaidEdgeColor(edge) {
 }
 
 function getOutgoing(action) {
+  const cases = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
   return [
     action.defaultNextAction ? { ...action.defaultNextAction, label: 'Default' } : null,
     ...(action.branches ?? []).map((branch) => ({ ...branch, label: branch.text || `Branch ${branch.index}` })),
-    ...(action.cases ?? []).map((branch) => ({ ...branch, label: branch.text ? `Case ${branch.text}` : 'Case' })),
+    ...cases.map((branch) => ({ ...branch, label: branch.text ? `Case ${branch.text}` : 'Case' })),
   ].filter(Boolean);
 }
 

@@ -1,3 +1,5 @@
+import { getDirectMenuCaseBranches } from './niceMenuRouting.js';
+
 const AUDIO_ASSIGN_RE = /ASSIGN\s+([A-Z0-9_:]*?(?:AUDIO|NOTE)[A-Z0-9_:]*)\s*=\s*"([^"]+)"/gi;
 
 export function validateNiceScript(script) {
@@ -44,7 +46,7 @@ function validateActionReferences(action, actionsById, errors) {
   const refs = [
     action.defaultNextAction,
     ...(action.branches ?? []),
-    ...(action.cases ?? []),
+    ...(action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? [])),
   ].filter(Boolean);
 
   refs.forEach((ref) => {
@@ -175,6 +177,11 @@ function validateMenuMask(actions, warnings) {
   const actual = new Set(caseAction
     ? (caseAction.cases ?? []).map((item) => item.text)
     : switchCases);
+
+  actions
+    .filter((action) => action.action === 'MENU')
+    .flatMap(getDirectMenuCaseBranches)
+    .forEach((branch) => actual.add(branch.text));
 
   if (!actual.size) {
     warnings.push(`Mascara ${mask}: nenhuma opcao encontrada em CASE ou SWITCH OP_ESCOLHIDA.`);
