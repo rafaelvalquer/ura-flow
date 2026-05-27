@@ -1,7 +1,12 @@
 const START_X = 72;
 const START_Y = 72;
 const COLUMN_GAP = 280;
-const ROW_GAP = 142;
+const ROW_GAP = 44;
+const BASE_NODE_HEIGHT = 94;
+const DECISION_SUMMARY_HEIGHT = 34;
+const OUTPUT_LIST_HEADER_HEIGHT = 16;
+const OUTPUT_ROW_HEIGHT = 30;
+const LONG_SNIPPET_EXTRA_HEIGHT = 18;
 
 export function organizeNiceScript(script) {
   const actions = script?.actions ?? [];
@@ -43,16 +48,19 @@ export function organizeNiceScript(script) {
   });
 
   const positions = new Map();
+  const tallestColumnHeight = maxColumnHeight(columns);
   [...columns.entries()].forEach(([level, columnActions]) => {
     columnActions.sort(compareActionsForLayout);
-    const columnHeight = (columnActions.length - 1) * ROW_GAP;
-    const baseY = START_Y + Math.max(0, (maxColumnSize(columns) - columnActions.length) * ROW_GAP * 0.34);
+    const columnHeight = estimateColumnHeight(columnActions);
+    const baseY = START_Y + Math.max(0, (tallestColumnHeight - columnHeight) * 0.18);
+    let nextY = baseY;
 
-    columnActions.forEach((action, index) => {
+    columnActions.forEach((action) => {
       positions.set(Number(action.actionId), {
         x: START_X + level * COLUMN_GAP,
-        y: Math.round(baseY + index * ROW_GAP - columnHeight * 0.04),
+        y: Math.round(nextY),
       });
+      nextY += estimateActionHeight(action) + ROW_GAP;
     });
   });
 
@@ -104,6 +112,47 @@ function actionLayoutPriority(action) {
   return 7;
 }
 
-function maxColumnSize(columns) {
-  return Math.max(1, ...[...columns.values()].map((column) => column.length));
+function maxColumnHeight(columns) {
+  return Math.max(1, ...[...columns.values()].map(estimateColumnHeight));
+}
+
+function estimateColumnHeight(actions) {
+  if (!actions.length) return 0;
+  return actions.reduce((total, action, index) => (
+    total + estimateActionHeight(action) + (index > 0 ? ROW_GAP : 0)
+  ), 0);
+}
+
+function estimateActionHeight(action) {
+  let height = BASE_NODE_HEIGHT;
+
+  if (action.action === 'IF' || action.action === 'CASE') {
+    height += DECISION_SUMMARY_HEIGHT;
+  }
+
+  const outputRows = estimateOutputRows(action);
+  if (outputRows > 0) {
+    height += OUTPUT_LIST_HEADER_HEIGHT + outputRows * OUTPUT_ROW_HEIGHT;
+  }
+
+  if (action.action === 'SNIPPET') {
+    const code = String(action.parameters?.[0] ?? '');
+    if (code.length > 600 || /\b(FUNCTION|SWITCH|FOREACH)\b/i.test(code)) {
+      height += LONG_SNIPPET_EXTRA_HEIGHT;
+    }
+  }
+
+  return height;
+}
+
+function estimateOutputRows(action) {
+  if (action.action === 'IF') return 2;
+  if (action.action === 'LOOP') return 2;
+  if (action.action === 'CASE') {
+    return Math.max(1, (action.cases?.length ?? 0) + (action.defaultNextAction ? 1 : 0));
+  }
+  if (action.action === 'MENU') {
+    return action.cases?.length ?? 0;
+  }
+  return 0;
 }

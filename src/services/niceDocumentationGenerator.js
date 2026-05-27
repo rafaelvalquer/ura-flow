@@ -322,7 +322,7 @@ function appendGaps(lines, actions, actionsById, validation) {
     });
     if (action.action === 'IF' && !(action.branches ?? []).length) gaps.push(`${formatActionRef(action)} IF sem branches.`);
     if (action.action === 'MENU' && !findMaskInActions(actions) && !hasDirectMenuCaseBranches(action)) gaps.push(`${formatActionRef(action)} MENU sem mascara detectada.`);
-    if (action.action === 'SNIPPET' && isMostlyOutputSnippet(action) && !/NEXT_STEP/i.test(action.parameters?.[0] ?? '') && !/MAX_REJ|MAX_SIL/i.test(action.caption)) {
+    if (action.action === 'SNIPPET' && isMostlyOutputSnippet(action) && !snippetHasNextStep(action) && !/MAX_REJ|MAX_SIL/i.test(action.caption) && !nextSnippetDefinesNextStep(action, actionsById)) {
       gaps.push(`${formatActionRef(action)} snippet de saida sem NEXT_STEP.`);
     }
     if (action.action === 'REST_API' && !actions.some((item) => item.action === 'RUNSUB' && /Alerta erro API/i.test(item.caption))) {
@@ -473,6 +473,24 @@ function isMostlyOutputSnippet(action) {
   const code = action.parameters?.[0] ?? '';
   return /parametros de saida|maxrej|maxsil|set |saida|tchau|transfer/i.test(action.caption)
     || /\b(NEXT_STEP|AUDIO|TRANSFERCODE|scriptpoint|MAPA_DNA)\b/i.test(code);
+}
+
+function snippetHasNextStep(action) {
+  return stripCommentLines(action.parameters?.[0] ?? '').split(/\r?\n/).some((line) => (
+    /^\s*(?:ASSIGN\s+)?NEXT_STEP\s*=/i.test(line)
+  ));
+}
+
+function nextSnippetDefinesNextStep(action, actionsById) {
+  const nextAction = actionsById.get(Number(action.defaultNextAction?.actionId));
+  return nextAction?.action === 'SNIPPET' && snippetHasNextStep(nextAction);
+}
+
+function stripCommentLines(code) {
+  return String(code ?? '')
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
 }
 
 function isAdvancedSnippet(action) {

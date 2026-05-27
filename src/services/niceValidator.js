@@ -29,7 +29,7 @@ export function validateNiceScript(script) {
     if (action.action === 'REST_API') validateRestApi(action, errors);
     if (action.action === 'WORKFLOWDATA') validateWorkflowData(action, errors);
     if (action.action === 'RETURN') validateReturn(action, warnings);
-    if (action.action === 'SNIPPET') validateSnippet(action, warnings);
+    if (action.action === 'SNIPPET') validateSnippet(action, warnings, actionsById);
   });
 
   validateMenuMask(actions, warnings);
@@ -139,7 +139,7 @@ function validateReturn(action, warnings) {
   }
 }
 
-function validateSnippet(action, warnings) {
+function validateSnippet(action, warnings, actionsById) {
   const code = action.parameters?.[0] ?? '';
   if (!code) return;
 
@@ -160,10 +160,33 @@ function validateSnippet(action, warnings) {
     if (/MAPA_DNA/i.test(code) && !/scriptpoint/i.test(code)) {
       warnings.push(`${action.caption}: MAPA_DNA sem scriptpoint.`);
     }
-    if (!/NEXT_STEP/i.test(code) && !/MAX_REJ|MAX_SIL/i.test(action.caption)) {
-      warnings.push(`${action.caption}: snippet de saida sem NEXT_STEP.`);
+    if (!hasNextStepAssignment(code) && !/MAX_REJ|MAX_SIL/i.test(action.caption) && !nextSnippetDefinesNextStep(action, actionsById)) {
+      warnings.push(`${formatActionLabel(action)}: snippet de saida sem NEXT_STEP.`);
     }
   }
+}
+
+function hasNextStepAssignment(code) {
+  return stripCommentLines(code).split(/\r?\n/).some((line) => (
+    /^\s*(?:ASSIGN\s+)?NEXT_STEP\s*=/i.test(line)
+  ));
+}
+
+function nextSnippetDefinesNextStep(action, actionsById) {
+  const nextAction = actionsById.get(Number(action.defaultNextAction?.actionId));
+  if (nextAction?.action !== 'SNIPPET') return false;
+  return hasNextStepAssignment(nextAction.parameters?.[0] ?? '');
+}
+
+function stripCommentLines(code) {
+  return String(code ?? '')
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
+function formatActionLabel(action) {
+  return `#${action.actionId} ${action.caption || action.action}`;
 }
 
 function validateMenuMask(actions, warnings) {
