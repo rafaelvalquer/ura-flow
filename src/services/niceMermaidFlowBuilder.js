@@ -139,8 +139,8 @@ function buildMermaidJourney(script, options = {}) {
   const actionsById = new Map(actions.map((action) => [Number(action.actionId), action]));
   const menus = actions.filter((action) => action.action === 'MENU');
 
-  if (!menus.length && hasApiJourney(actions)) {
-    return buildApiJourney(actions, actionsById);
+  if (!menus.length) {
+    return buildNoMenuStructuralJourney(actions, actionsById);
   }
 
   if (options.mode === 'detail' && menus.length) {
@@ -223,6 +223,170 @@ function buildMermaidJourney(script, options = {}) {
     nodes: [...nodes.values()],
     edges: dedupeEdges(edges),
   };
+}
+
+function buildNoMenuStructuralJourney(actions, actionsById) {
+  const nodes = new Map();
+  const edges = [];
+  const expanded = new Set();
+  const root = actions.find((action) => action.action === 'BEGIN') ?? actions[0];
+
+  function visit(actionId, sourceNodeId = '', edgeLabel = 'Segue') {
+    const action = actionsById.get(Number(actionId));
+    if (!action) return;
+
+    const node = makeStructuralActionNode(action);
+    nodes.set(node.id, node);
+    if (sourceNodeId) addEdge(edges, sourceNodeId, node.id, edgeLabel);
+
+    const currentId = Number(action.actionId);
+    if (expanded.has(currentId)) return;
+    expanded.add(currentId);
+
+    getStructuralOutgoing(action).forEach((branch) => {
+      visit(Number(branch.actionId), node.id, branch.label);
+    });
+  }
+
+  if (root) visit(Number(root.actionId));
+
+  actions
+    .filter((action) => action.action === 'ONRELEASE')
+    .forEach((action) => visit(Number(action.actionId)));
+
+  return {
+    nodes: [...nodes.values()],
+    edges: dedupeEdges(edges),
+  };
+}
+
+function makeStructuralActionNode(action) {
+  if (action.action === 'BEGIN') {
+    const variables = extractBeginVariables(action);
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'start',
+      title: `Inicio: ${cleanCaption(action.caption || 'Fluxo')}`,
+      lines: variables.length ? [`Variaveis: ${variables.slice(0, 10).join(', ')}`, variables.length > 10 && `+${variables.length - 10} variaveis`] : ['Sem variaveis de entrada declaradas'],
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (action.action === 'ONRELEASE') {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'onrelease',
+      title: cleanCaption(action.caption || 'OnRelease'),
+      lines: ['Fluxo ao desligar chamada'],
+      actionId: Number(action.actionId),
+    });
+  }
+
+  const output = summarizeActionOutput(action);
+
+  if (action.action === 'IF') {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'rule',
+      title: cleanCaption(action.caption || 'Regra / IF'),
+      lines: [`IF ${action.parameters?.[0] || 'sem expressao'}`],
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (['RUNSUB', 'REST_API', 'WORKFLOWDATA'].includes(action.action)) {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'api',
+      title: cleanCaption(action.caption || action.action),
+      lines: linesForAction(action, output),
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (['RUNSCRIPT', 'RETURN', 'PLAY'].includes(action.action)) {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'output',
+      title: cleanCaption(action.caption || action.action),
+      lines: linesForAction(action, output),
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (action.action === 'LOOP') {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: /sil/i.test(`${action.caption ?? ''} ${action.parameters?.[1] ?? ''}`) ? 'silence' : 'error',
+      title: cleanCaption(action.caption || 'Loop'),
+      lines: [`Tentativas: ${action.parameters?.[0] || '-'}`, action.parameters?.[1] && `Variavel: ${action.parameters[1]}`],
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (action.action === 'ASSIGN') {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'output',
+      title: cleanCaption(action.caption || 'Assign'),
+      lines: compactLines([`${action.parameters?.[0] || 'VAR'} = ${action.parameters?.[1] || ''}`]),
+      actionId: Number(action.actionId),
+    });
+  }
+
+  if (action.action === 'SNIPPET' && isAdvancedSnippet(action.parameters?.[0] ?? '') && !hasOutput(output)) {
+    return makeJourneyNode({
+      id: `struct_action_${action.actionId}`,
+      kind: 'advanced',
+      title: cleanCaption(action.caption || 'Logica avancada'),
+      lines: summarizeAdvancedSnippet(action.parameters?.[0] ?? ''),
+      actionId: Number(action.actionId),
+    });
+  }
+
+  return makeJourneyNode({
+    id: `struct_action_${action.actionId}`,
+    kind: action.action === 'SNIPPET' && isAdvancedSnippet(action.parameters?.[0] ?? '') ? 'advanced' : 'output',
+    title: cleanCaption(action.caption || action.action),
+    lines: linesForAction(action, output),
+    actionId: Number(action.actionId),
+  });
+}
+
+function getStructuralOutgoing(action) {
+  const branches = [];
+
+  if (action.defaultNextAction?.actionId && Number(action.defaultNextAction.actionId) > 0) {
+    branches.push({ ...action.defaultNextAction, label: defaultStructuralEdgeLabel(action) });
+  }
+
+  (action.branches ?? [])
+    .filter((branch) => Number(branch.actionId) > 0)
+    .forEach((branch) => {
+      branches.push({ ...branch, label: structuralBranchLabel(action, branch) });
+    });
+
+  const cases = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
+  cases
+    .filter((branch) => Number(branch.actionId) > 0)
+    .forEach((branch) => {
+      branches.push({ ...branch, label: branch.text ? `Case ${branch.text}` : 'Case' });
+    });
+
+  return branches;
+}
+
+function defaultStructuralEdgeLabel(action) {
+  if (['RUNSUB', 'REST_API', 'WORKFLOWDATA'].includes(action.action)) return 'Retorno';
+  return 'Segue';
+}
+
+function structuralBranchLabel(action, branch) {
+  const text = String(branch.text ?? '').trim();
+  if (text) return text;
+  if (action.action === 'IF') return Number(branch.index) === 1 ? 'False' : 'True';
+  if (action.action === 'LOOP') return Number(branch.index) === 1 ? 'Repeat' : 'Finished';
+  return `Branch ${branch.index ?? ''}`.trim();
 }
 
 function buildDetailedMenuJourney(actions, actionsById, menus) {
@@ -1254,6 +1418,7 @@ function getOutputNode(outputNodes, nodes, output, actionId) {
       output.audio && `Audio: ${output.audio}`,
       output.nextStep && `NEXT_STEP: ${output.nextStep}`,
       output.scriptpoint && `scriptpoint: ${output.scriptpoint}`,
+      output.mapaDna && `MAPA_DNA: ${output.mapaDna}`,
       output.transferCode && `TransferCode: ${output.transferCode}`,
     ]),
     actionId,
@@ -1497,6 +1662,7 @@ function linesForAction(action, output) {
     output.audio && `Audio: ${output.audio}`,
     output.nextStep && `NEXT_STEP: ${output.nextStep}`,
     output.scriptpoint && `scriptpoint: ${output.scriptpoint}`,
+    output.mapaDna && `MAPA_DNA: ${output.mapaDna}`,
     output.transferCode && `TransferCode: ${output.transferCode}`,
   ];
 }
@@ -1520,6 +1686,7 @@ export function createOutputNodeFromAssignments(output, idPrefix, actionId) {
       output.audio && `Audio: ${output.audio}`,
       output.nextStep && `NEXT_STEP: ${output.nextStep}`,
       output.scriptpoint && `scriptpoint: ${output.scriptpoint}`,
+      output.mapaDna && `MAPA_DNA: ${output.mapaDna}`,
       output.transferCode && `TransferCode: ${output.transferCode}`,
     ]),
     actionId,
