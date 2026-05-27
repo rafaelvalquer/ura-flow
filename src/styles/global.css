@@ -2763,6 +2763,28 @@ button:disabled {
   stroke-width: 3;
 }
 
+.nice-edge-selected path {
+  stroke: #10b981;
+  stroke-width: 3.4;
+  stroke-dasharray: 10 7;
+  animation: nice-edge-dash-flow 0.8s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.75));
+}
+
+.nice-edge-selected-incoming path {
+  stroke: #06b6d4;
+}
+
+.nice-edge-selected-outgoing path {
+  stroke: #10b981;
+}
+
+@keyframes nice-edge-dash-flow {
+  to {
+    stroke-dashoffset: -17;
+  }
+}
+
 .nice-simulation-path {
   display: flex;
   flex-wrap: wrap;

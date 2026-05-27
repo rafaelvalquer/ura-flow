@@ -40,7 +40,7 @@ export default function NiceScriptCanvas({
   const simulatedActionIds = useMemo(() => new Set(simulation?.actionIds ?? []), [simulation]);
   const simulatedEdgeIds = useMemo(() => new Set(simulation?.edgeIds ?? []), [simulation]);
   const nodes = useMemo(() => makeNiceNodes(script, selectedActionId, simulatedActionIds), [script, selectedActionId, simulatedActionIds]);
-  const edges = useMemo(() => makeNiceEdges(script, simulatedEdgeIds), [script, simulatedEdgeIds]);
+  const edges = useMemo(() => makeNiceEdges(script, simulatedEdgeIds, selectedActionId), [script, simulatedEdgeIds, selectedActionId]);
   const layoutKey = useMemo(() => makeLayoutKey(script), [script]);
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
@@ -233,33 +233,41 @@ function makeNiceNodes(script, selectedActionId, simulatedActionIds) {
   }));
 }
 
-function makeNiceEdges(script, simulatedEdgeIds) {
+function makeNiceEdges(script, simulatedEdgeIds, selectedActionId) {
   const actionsById = new Set((script?.actions ?? []).map((action) => Number(action.actionId)));
   const edges = [];
 
   (script?.actions ?? []).forEach((action) => {
     if (action.defaultNextAction && actionsById.has(Number(action.defaultNextAction.actionId))) {
-      edges.push(makeEdge(action, action.defaultNextAction, 'Default', 'nice-edge-default', 'default', simulatedEdgeIds));
+      edges.push(makeEdge(action, action.defaultNextAction, 'Default', 'nice-edge-default', 'default', simulatedEdgeIds, selectedActionId));
     }
 
     (action.branches ?? []).forEach((branch) => {
       if (!actionsById.has(Number(branch.actionId))) return;
-      edges.push(makeEdge(action, branch, branch.text || `Branch ${branch.index}`, 'nice-edge-branch', 'branch', simulatedEdgeIds));
+      edges.push(makeEdge(action, branch, branch.text || `Branch ${branch.index}`, 'nice-edge-branch', 'branch', simulatedEdgeIds, selectedActionId));
     });
 
     const caseBranches = action.action === 'MENU' ? getDirectMenuCaseBranches(action) : (action.cases ?? []);
     caseBranches.forEach((branch) => {
       if (!actionsById.has(Number(branch.actionId))) return;
-      edges.push(makeEdge(action, branch, branch.text || 'Case', 'nice-edge-case', 'case', simulatedEdgeIds));
+      edges.push(makeEdge(action, branch, branch.text || 'Case', 'nice-edge-case', 'case', simulatedEdgeIds, selectedActionId));
     });
   });
 
   return edges;
 }
 
-function makeEdge(action, branch, label, className, kind, simulatedEdgeIds) {
+function makeEdge(action, branch, label, className, kind, simulatedEdgeIds, selectedActionId) {
   const id = makeNiceEdgeId(action.actionId, branch.actionId, label, branch.index);
   const isSimulated = simulatedEdgeIds.has(id);
+  const selectedId = Number(selectedActionId);
+  const isOutgoing = selectedId > 0 && Number(action.actionId) === selectedId;
+  const isIncoming = selectedId > 0 && Number(branch.actionId) === selectedId;
+  const selectedClassName = [
+    isIncoming || isOutgoing ? 'nice-edge-selected' : '',
+    isIncoming ? 'nice-edge-selected-incoming' : '',
+    isOutgoing ? 'nice-edge-selected-outgoing' : '',
+  ].filter(Boolean).join(' ');
   const sourceHandle = kind === 'case'
     ? makeCaseHandleId(branch, label)
     : kind === 'branch' && action.action === 'IF'
@@ -277,7 +285,7 @@ function makeEdge(action, branch, label, className, kind, simulatedEdgeIds) {
     label,
     type: isSimulated ? 'animatedSvgEdge' : undefined,
     animated: isSimulated,
-    className: `${className}${isSimulated ? ' nice-edge-simulated' : ''}`,
+    className: `${className}${isSimulated ? ' nice-edge-simulated' : ''}${selectedClassName ? ` ${selectedClassName}` : ''}`,
     markerEnd: {
       type: MarkerType.ArrowClosed,
       width: 18,
