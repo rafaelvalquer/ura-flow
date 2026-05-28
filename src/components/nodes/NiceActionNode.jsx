@@ -42,6 +42,7 @@ export default function NiceActionNode({ data, selected }) {
   const ifOutputs = isIfAction ? makeIfOutputs(data) : [];
   const loopOutputs = isLoopAction ? makeLoopOutputs(data) : [];
   const decisionSummary = makeDecisionSummary(data);
+  const actionSummary = makeActionSummary(data);
 
   return (
     <div className={`nice-action-node nice-action-${data.action?.toLowerCase()} ${selected ? 'is-selected' : ''} ${data.isSimulated ? 'is-simulated' : ''}`}>
@@ -58,6 +59,11 @@ export default function NiceActionNode({ data, selected }) {
         <span>{data.parameters?.length ?? 0} params</span>
         <span>{branchCount} saidas</span>
       </div>
+      {actionSummary ? (
+        <div className="nice-action-node-summary" title={actionSummary}>
+          {actionSummary}
+        </div>
+      ) : null}
       {decisionSummary ? (
         <div className={`nice-decision-summary is-${decisionSummary.kind}`} title={decisionSummary.title}>
           {decisionSummary.label ? <span>{decisionSummary.label}</span> : null}
@@ -128,6 +134,30 @@ export default function NiceActionNode({ data, selected }) {
       )}
     </div>
   );
+}
+
+function makeActionSummary(data) {
+  const parameters = data.parameters ?? [];
+
+  if (data.action === 'PLAY') {
+    return cleanDecisionValue(parameters[0]) || '';
+  }
+
+  if (data.action === 'RUNSCRIPT') {
+    return cleanDecisionValue(parameters[0]) || '';
+  }
+
+  if (data.action === 'REST_API') {
+    const method = cleanDecisionValue(parameters[4]);
+    const url = cleanDecisionValue(parameters[1]);
+    return [method, url].filter(Boolean).join(' ');
+  }
+
+  if (data.action === 'WORKFLOWDATA' || data.action === 'RETURN') {
+    return cleanDecisionValue(parameters[0]) || '';
+  }
+
+  return '';
 }
 
 function makeDecisionSummary(data) {

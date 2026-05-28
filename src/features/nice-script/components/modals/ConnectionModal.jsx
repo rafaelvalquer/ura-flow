@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Field, SelectField } from '../forms/NiceFormFields.jsx';
 import { getAvailableConnectionOptions } from '../../services/niceConnectionOptions.js';
 
@@ -81,4 +81,3 @@ export default function ConnectionModal({ connection, sourceAction, targetAction
     </div>
   );
 }
-

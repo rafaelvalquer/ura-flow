@@ -475,11 +475,59 @@ export default function NiceScriptWorkspace() {
   return (
     <>
       <header className="nice-toolbar">
-        <div>
+        <div className="nice-toolbar-title">
           <h1>Script NICE</h1>
           <p>{script.name} - {script.actions.length} actions</p>
         </div>
-        <div className="toolbar-context">
+        <div className="nice-toolbar-actions">
+          {niceMode === 'builder' ? (
+            <div className="nice-toolbar-group is-primary" aria-label="Acoes principais">
+              <input ref={fileInputRef} className="sr-only" type="file" accept=".xml" onChange={handleImportXml} />
+              <button className="ghost-button" type="button" onClick={() => fileInputRef.current?.click()}>
+                <FileInput size={16} />
+                Importar XML
+              </button>
+              <label className="nice-toolbar-add">
+                <select value={manualActionType} onChange={(event) => setManualActionType(event.target.value)}>
+                  {MANUAL_ACTION_TYPES.map((type) => (
+                    <option value={type} key={type}>{type}</option>
+                  ))}
+                </select>
+                <button className="ghost-button" type="button" onClick={() => addManualAction(manualActionType)}>
+                  <Plus size={16} />
+                  Adicionar
+                </button>
+              </label>
+              <button className="ghost-button" type="button" onClick={handleOrganizeScript} disabled={!script.actions.length}>
+                <LayoutGrid size={16} />
+                Organizar
+              </button>
+              <button className="secondary-button" type="button" onClick={copyToNice}>
+                <ClipboardCopy size={16} />
+                Copiar NICE
+              </button>
+            </div>
+          ) : (
+            <div className="nice-toolbar-group is-primary" aria-label="Acoes do simulador">
+              <button className="ghost-button" type="button" onClick={resetSimulation}>
+                Resetar teste
+              </button>
+            </div>
+          )}
+
+          <div className="nice-toolbar-group is-secondary" aria-label="Acoes secundarias">
+            <button className="ghost-button" type="button" onClick={() => setDocumentationOpen(true)} disabled={!script.actions.length}>
+              <FileText size={16} />
+              Documentar
+            </button>
+            {niceMode === 'builder' && (
+              <button className="ghost-button" type="button" onClick={clearCanvas} disabled={!script.actions.length}>
+                <Trash2 size={16} />
+                Limpar
+              </button>
+            )}
+          </div>
+
           <div className="nice-mode-toggle" role="group" aria-label="Modo Script NICE">
             <button
               className={niceMode === 'builder' ? 'is-active' : ''}
@@ -496,41 +544,6 @@ export default function NiceScriptWorkspace() {
               Simulador
             </button>
           </div>
-          <button className="ghost-button" type="button" onClick={() => setDocumentationOpen(true)} disabled={!script.actions.length}>
-            <FileText size={16} />
-            Documentar fluxo
-          </button>
-          {niceMode === 'builder' ? (
-            <>
-              <label className="nice-toolbar-add">
-                <select value={manualActionType} onChange={(event) => setManualActionType(event.target.value)}>
-                  {MANUAL_ACTION_TYPES.map((type) => (
-                    <option value={type} key={type}>{type}</option>
-                  ))}
-                </select>
-                <button className="ghost-button" type="button" onClick={() => addManualAction(manualActionType)}>
-                  <Plus size={16} />
-                  Adicionar action
-                </button>
-              </label>
-              <button className="ghost-button" type="button" onClick={handleOrganizeScript} disabled={!script.actions.length}>
-                <LayoutGrid size={16} />
-                Organizar
-              </button>
-              <button className="ghost-button" type="button" onClick={clearCanvas} disabled={!script.actions.length}>
-                <Trash2 size={16} />
-                Limpar canvas
-              </button>
-              <button className="secondary-button" type="button" onClick={copyToNice}>
-                <ClipboardCopy size={16} />
-                Copiar para NICE
-              </button>
-            </>
-          ) : (
-            <button className="ghost-button" type="button" onClick={resetSimulation}>
-              Resetar teste
-            </button>
-          )}
         </div>
       </header>
 
@@ -602,7 +615,6 @@ export default function NiceScriptWorkspace() {
                 <small>WORKFLOWDATA, REST_API, tratamento e RETURN</small>
               </span>
             </button>
-            <input ref={fileInputRef} className="sr-only" type="file" accept=".xml" onChange={handleImportXml} />
             <button className="nice-template-button" type="button" onClick={() => fileInputRef.current?.click()}>
               <FileInput size={17} />
               <span>
