@@ -36,10 +36,17 @@ export default function NiceScriptCanvas({
   onDropAction,
   onDeleteConnection,
   onDeleteAction,
+  onQuickAddAction,
 }) {
   const simulatedActionIds = useMemo(() => new Set(simulation?.actionIds ?? []), [simulation]);
   const simulatedEdgeIds = useMemo(() => new Set(simulation?.edgeIds ?? []), [simulation]);
-  const nodes = useMemo(() => makeNiceNodes(script, selectedActionId, simulatedActionIds), [script, selectedActionId, simulatedActionIds]);
+  const nodes = useMemo(
+    () => makeNiceNodes(script, selectedActionId, simulatedActionIds, {
+      readOnly,
+      onQuickAddAction,
+    }),
+    [script, selectedActionId, simulatedActionIds, readOnly, onQuickAddAction],
+  );
   const edges = useMemo(() => makeNiceEdges(script, simulatedEdgeIds, selectedActionId), [script, simulatedEdgeIds, selectedActionId]);
   const layoutKey = useMemo(() => makeLayoutKey(script), [script]);
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
@@ -216,7 +223,7 @@ export default function NiceScriptCanvas({
   );
 }
 
-function makeNiceNodes(script, selectedActionId, simulatedActionIds) {
+function makeNiceNodes(script, selectedActionId, simulatedActionIds, quickAddOptions = {}) {
   return (script?.actions ?? []).map((action) => ({
     id: String(action.actionId),
     type: 'niceActionNode',
@@ -229,6 +236,8 @@ function makeNiceNodes(script, selectedActionId, simulatedActionIds) {
       ...action,
       label: action.caption,
       isSimulated: simulatedActionIds.has(Number(action.actionId)),
+      readOnly: quickAddOptions.readOnly,
+      onQuickAddAction: quickAddOptions.onQuickAddAction,
     },
   }));
 }

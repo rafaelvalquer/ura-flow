@@ -52,6 +52,7 @@ export default function NiceScriptWorkspace() {
   const [pendingTemplateInsert, setPendingTemplateInsert] = useState(null);
   const [templateInsertMode, setTemplateInsertMode] = useState('replace');
   const [manualActionType, setManualActionType] = useState('SNIPPET');
+  const [leftPanelTab, setLeftPanelTab] = useState('actions');
   const [pendingConnection, setPendingConnection] = useState(null);
   const [snippetStudioActionId, setSnippetStudioActionId] = useState(null);
   const [isDocumentationOpen, setDocumentationOpen] = useState(false);
@@ -275,6 +276,25 @@ export default function NiceScriptWorkspace() {
       };
     });
     setSelectedActionId(actionId);
+    setFocusActionRequest({ actionId, nonce: Date.now() });
+    setCopyStatus('');
+  }
+
+  function quickAddConnectedAction(sourceActionId, actionType) {
+    const sourceId = Number(sourceActionId);
+    const sourceAction = script.actions.find((action) => Number(action.actionId) === sourceId);
+    if (!sourceAction) return;
+
+    const actionId = getNextActionId(script.actions);
+    const position = findQuickAddPosition(sourceAction, script.actions);
+    const nextAction = makeDefaultAction(actionType, actionId, position);
+
+    setScript((current) => ({
+      ...current,
+      actions: [...current.actions, nextAction],
+    }));
+    setSelectedActionId(actionId);
+    setPendingConnection({ sourceId, targetId: actionId });
     setFocusActionRequest({ actionId, nonce: Date.now() });
     setCopyStatus('');
   }
@@ -583,75 +603,102 @@ export default function NiceScriptWorkspace() {
       ) : (
         <div className="nice-workspace-grid">
         <aside className="nice-left-panel">
-          <section className="panel-section nice-panel">
-            <div className="section-header">
-              <h2>Templates</h2>
-            </div>
-            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'menu', label: 'Menu padrao NICE' })}>
-              <Menu size={17} />
-              <span>
-                <strong>Menu padrao NICE</strong>
-                <small>Wizard com SET_PARAMS, SIL e REJ</small>
-              </span>
-            </button>
-            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'entry', label: 'Entry padrao PCI', getScript: () => makeEntryTemplate() })}>
-              <FileCode2 size={17} />
-              <span>
-                <strong>Entry padrao PCI</strong>
-                <small>BEGIN, env/path, RUNSCRIPT</small>
-              </span>
-            </button>
-            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'api', label: 'Chamada API / RUNSUB' })}>
-              <Milestone size={17} />
-              <span>
-                <strong>Chamada API / RUNSUB</strong>
-                <small>RUNSUB, IF e destinos True/False</small>
-              </span>
-            </button>
-            <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'restApi', label: 'API REST NICE' })}>
-              <Milestone size={17} />
-              <span>
-                <strong>API REST NICE</strong>
-                <small>WORKFLOWDATA, REST_API, tratamento e RETURN</small>
-              </span>
-            </button>
-            <button className="nice-template-button" type="button" onClick={() => fileInputRef.current?.click()}>
-              <FileInput size={17} />
-              <span>
-                <strong>Importar XML</strong>
-                <small>Visualizar e clonar script NICE</small>
-              </span>
-            </button>
-            {importError && <div className="nice-alert is-error">{importError}</div>}
-          </section>
-
-          <ActionPalette onAddAction={(type) => addManualAction(type)} />
-
-          <section className="panel-section nice-panel">
-            <div className="section-header">
-              <h2>Templates clonados</h2>
-              <button className="icon-button" type="button" title="Clonar script atual" onClick={handleCloneCurrent}>
-                <Save size={15} />
+          <section className="panel-section nice-panel nice-left-tabs-panel">
+            <div className="nice-left-tabs" role="tablist" aria-label="Menu lateral Script NICE">
+              <button
+                className={leftPanelTab === 'actions' ? 'is-active' : ''}
+                type="button"
+                role="tab"
+                aria-selected={leftPanelTab === 'actions'}
+                onClick={() => setLeftPanelTab('actions')}
+              >
+                Actions
+              </button>
+              <button
+                className={leftPanelTab === 'templates' ? 'is-active' : ''}
+                type="button"
+                role="tab"
+                aria-selected={leftPanelTab === 'templates'}
+                onClick={() => setLeftPanelTab('templates')}
+              >
+                Templates
               </button>
             </div>
-            {clonedTemplates.length === 0 ? (
-              <p className="nice-empty-text">Importe ou ajuste um script e salve uma copia reutilizavel.</p>
-            ) : (
-              <div className="nice-clone-list">
-                {clonedTemplates.map((clone) => (
-                  <article className="nice-clone-item" key={clone.id}>
-                    <button type="button" onClick={() => requestTemplateInsert({ kind: 'clone', label: clone.name, getScript: () => clone })}>
-                      <strong>{clone.name}</strong>
-                      <small>{clone.actions.length} actions</small>
-                    </button>
-                    <button className="icon-button" type="button" onClick={() => handleDeleteClone(clone.id)} title="Remover clone">
-                      <Trash2 size={14} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
           </section>
+
+          {leftPanelTab === 'actions' ? (
+            <ActionPalette onAddAction={(type) => addManualAction(type)} />
+          ) : (
+            <>
+              <section className="panel-section nice-panel">
+                <div className="section-header">
+                  <h2>Templates</h2>
+                </div>
+                <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'menu', label: 'Menu padrao NICE' })}>
+                  <Menu size={17} />
+                  <span>
+                    <strong>Menu padrao NICE</strong>
+                    <small>Wizard com SET_PARAMS, SIL e REJ</small>
+                  </span>
+                </button>
+                <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'entry', label: 'Entry padrao PCI', getScript: () => makeEntryTemplate() })}>
+                  <FileCode2 size={17} />
+                  <span>
+                    <strong>Entry padrao PCI</strong>
+                    <small>BEGIN, env/path, RUNSCRIPT</small>
+                  </span>
+                </button>
+                <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'api', label: 'Chamada API / RUNSUB' })}>
+                  <Milestone size={17} />
+                  <span>
+                    <strong>Chamada API / RUNSUB</strong>
+                    <small>RUNSUB, IF e destinos True/False</small>
+                  </span>
+                </button>
+                <button className="nice-template-button" type="button" onClick={() => requestTemplateInsert({ kind: 'restApi', label: 'API REST NICE' })}>
+                  <Milestone size={17} />
+                  <span>
+                    <strong>API REST NICE</strong>
+                    <small>WORKFLOWDATA, REST_API, tratamento e RETURN</small>
+                  </span>
+                </button>
+                <button className="nice-template-button" type="button" onClick={() => fileInputRef.current?.click()}>
+                  <FileInput size={17} />
+                  <span>
+                    <strong>Importar XML</strong>
+                    <small>Visualizar e clonar script NICE</small>
+                  </span>
+                </button>
+                {importError && <div className="nice-alert is-error">{importError}</div>}
+              </section>
+
+              <section className="panel-section nice-panel">
+                <div className="section-header">
+                  <h2>Templates clonados</h2>
+                  <button className="icon-button" type="button" title="Clonar script atual" onClick={handleCloneCurrent}>
+                    <Save size={15} />
+                  </button>
+                </div>
+                {clonedTemplates.length === 0 ? (
+                  <p className="nice-empty-text">Importe ou ajuste um script e salve uma copia reutilizavel.</p>
+                ) : (
+                  <div className="nice-clone-list">
+                    {clonedTemplates.map((clone) => (
+                      <article className="nice-clone-item" key={clone.id}>
+                        <button type="button" onClick={() => requestTemplateInsert({ kind: 'clone', label: clone.name, getScript: () => clone })}>
+                          <strong>{clone.name}</strong>
+                          <small>{clone.actions.length} actions</small>
+                        </button>
+                        <button className="icon-button" type="button" onClick={() => handleDeleteClone(clone.id)} title="Remover clone">
+                          <Trash2 size={14} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </aside>
 
         <NiceScriptCanvas
@@ -660,12 +707,15 @@ export default function NiceScriptWorkspace() {
           simulation={null}
           focusActionRequest={focusActionRequest}
           onSelectAction={setSelectedActionId}
-          onClearSelection={() => setSelectedActionId(null)}
+          onClearSelection={() => {
+            setSelectedActionId(null);
+          }}
           onMoveAction={updateActionPosition}
           onConnectActions={handleConnectActions}
           onDropAction={addManualAction}
           onDeleteConnection={deleteConnection}
           onDeleteAction={removeActionAndConnections}
+          onQuickAddAction={quickAddConnectedAction}
         />
 
         <aside className="nice-right-panel">
@@ -775,6 +825,27 @@ export default function NiceScriptWorkspace() {
       )}
     </>
   );
+}
+
+function findQuickAddPosition(sourceAction, actions) {
+  const baseX = Number(sourceAction.x) || 160;
+  const baseY = Number(sourceAction.y) || 160;
+  const usedPositions = (actions ?? []).map((action) => ({
+    x: Number(action.x) || 0,
+    y: Number(action.y) || 0,
+  }));
+  let candidate = { x: baseX + 300, y: baseY };
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const hasCollision = usedPositions.some((position) => (
+      Math.abs(position.x - candidate.x) < 240
+      && Math.abs(position.y - candidate.y) < 130
+    ));
+    if (!hasCollision) return candidate;
+    candidate = { x: baseX + 300, y: baseY + (attempt + 1) * 140 };
+  }
+
+  return candidate;
 }
 
 function NiceMenuWizard({ initialConfig, onCancel, onCreate }) {

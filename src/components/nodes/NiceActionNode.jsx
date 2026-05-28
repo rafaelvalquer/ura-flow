@@ -1,4 +1,5 @@
-import { Handle, Position } from '@xyflow/react';
+import { useEffect, useState } from 'react';
+import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import {
   Braces,
   GitBranch,
@@ -7,12 +8,17 @@ import {
   Menu,
   Milestone,
   Play,
+  Plus,
   Repeat,
   Route,
   Variable,
 } from 'lucide-react';
 import { NICE_ACTION_LABELS } from '../../services/niceScriptModel.js';
 import { getDirectMenuCaseBranches } from '../../services/niceMenuRouting.js';
+import {
+  ACTION_PALETTE_GROUPS,
+  ACTION_PALETTE_META,
+} from '../../features/nice-script/constants/niceScriptConstants.js';
 
 const icons = {
   BEGIN: Play,
@@ -43,9 +49,49 @@ export default function NiceActionNode({ data, selected }) {
   const loopOutputs = isLoopAction ? makeLoopOutputs(data) : [];
   const decisionSummary = makeDecisionSummary(data);
   const actionSummary = makeActionSummary(data);
+  const [isQuickAddOpen, setQuickAddOpen] = useState(false);
+  const canQuickAdd = selected && !data.readOnly;
+
+  useEffect(() => {
+    if (!canQuickAdd) setQuickAddOpen(false);
+  }, [canQuickAdd]);
 
   return (
     <div className={`nice-action-node nice-action-${data.action?.toLowerCase()} ${selected ? 'is-selected' : ''} ${data.isSimulated ? 'is-simulated' : ''}`}>
+      {canQuickAdd ? (
+        <NodeToolbar isVisible={canQuickAdd} position={Position.Top} offset={10}>
+          <div
+            className="nice-node-quick-toolbar nodrag nopan"
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className={`nice-node-quick-add-button nodrag nopan ${isQuickAddOpen ? 'is-active' : ''}`}
+              type="button"
+              title="Adicionar action conectada"
+              aria-expanded={isQuickAddOpen}
+              onMouseDown={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                setQuickAddOpen((current) => !current);
+              }}
+            >
+              <Plus size={16} />
+            </button>
+            {isQuickAddOpen ? (
+              <QuickAddActionMenu
+                sourceActionId={data.actionId}
+                onSelect={(actionType) => {
+                  setQuickAddOpen(false);
+                  data.onQuickAddAction?.(data.actionId, actionType);
+                }}
+              />
+            ) : null}
+          </div>
+        </NodeToolbar>
+      ) : null}
       <Handle type="target" position={Position.Left} />
       <div className="nice-action-node-title">
         <Icon size={16} />
@@ -132,6 +178,47 @@ export default function NiceActionNode({ data, selected }) {
       ) : (
         <Handle type="source" position={Position.Right} />
       )}
+    </div>
+  );
+}
+
+function QuickAddActionMenu({ sourceActionId, onSelect }) {
+  return (
+    <div className="nice-node-quick-menu nodrag nopan" role="menu" aria-label={`Adicionar action conectada ao node ${sourceActionId}`}>
+      {ACTION_PALETTE_GROUPS.map((group) => (
+        <section className="nice-node-quick-menu-group" key={group.key}>
+          <div className="nice-node-quick-menu-title" style={{ '--accent': group.accent }}>
+            {group.title}
+          </div>
+          <div className="nice-node-quick-menu-items">
+            {group.actions.map((type) => {
+              const meta = ACTION_PALETTE_META[type] ?? {};
+              const Icon = meta.icon ?? Braces;
+              return (
+                <button
+                  className="nice-node-quick-menu-item nodrag nopan"
+                  type="button"
+                  role="menuitem"
+                  key={type}
+                  style={{ '--accent': group.accent }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect(type);
+                  }}
+                >
+                  <span className="nice-node-quick-menu-icon" aria-hidden="true">
+                    <Icon size={15} />
+                  </span>
+                  <span>
+                    <strong>{NICE_ACTION_LABELS[type] ?? type}</strong>
+                    <small>{type}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
