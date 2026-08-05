@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "desktop:install": "npm --prefix desktop install",
+    "desktop:start": "npm run build && npm --prefix desktop run start",
+    "package:win": "npm run build && npm --prefix desktop run package:win"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.2",
