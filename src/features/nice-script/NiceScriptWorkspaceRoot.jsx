@@ -612,7 +612,7 @@ export default function NiceScriptWorkspace() {
                 aria-selected={leftPanelTab === 'actions'}
                 onClick={() => setLeftPanelTab('actions')}
               >
-                Actions
+                <span>Actions</span>
               </button>
               <button
                 className={leftPanelTab === 'templates' ? 'is-active' : ''}
@@ -621,7 +621,7 @@ export default function NiceScriptWorkspace() {
                 aria-selected={leftPanelTab === 'templates'}
                 onClick={() => setLeftPanelTab('templates')}
               >
-                Templates
+                <span>Templates</span>
               </button>
             </div>
           </section>

@@ -7,7 +7,7 @@ import {
 } from '../../constants/niceScriptConstants.js';
 
 export default function ActionPalette({ onAddAction }) {
-  const [openGroups, setOpenGroups] = useState(() => ({ entry: true }));
+  const [openGroups, setOpenGroups] = useState(() => ({}));
 
   function toggleGroup(groupKey) {
     setOpenGroups((current) => ({

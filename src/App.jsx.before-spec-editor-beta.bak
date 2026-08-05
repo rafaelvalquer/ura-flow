@@ -11,7 +11,6 @@ import UxReportPanel from "./components/UxReportPanel";
 import LoadingOverlay from "./components/LoadingOverlay";
 import NiceScriptWorkspace from "./components/NiceScriptWorkspace";
 import SpecNiceComparisonModal from "./components/SpecNiceComparisonModal";
-import SpecEditorWorkspace from "./components/spec-editor/SpecEditorWorkspace.jsx";
 import Toolbar from "./components/Toolbar";
 import { parseExcelFile } from "./services/excelParserClient.js";
 import { buildFlow } from "./services/flowBuilder.js";
@@ -544,14 +543,12 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className={`app-shell ${workspaceMode === "spec" ? "spec-workspace-shell" : workspaceMode === "nice" ? "nice-workspace-shell" : "editor-workspace-shell"}`}>
+      <div className={`app-shell ${workspaceMode === "spec" ? "spec-workspace-shell" : "nice-workspace-shell"}`}>
         {isLoading && <LoadingOverlay fileName={loadingFileName} progress={loadingProgress} title={loadingTitle} />}
         <WorkspaceModeSwitch workspaceMode={workspaceMode} onChange={setWorkspaceMode} />
 
         {workspaceMode === "nice" ? (
           <NiceScriptWorkspace />
-        ) : workspaceMode === "editor" ? (
-          <SpecEditorWorkspace initialParsedData={parsedData} />
         ) : (
           <>
             <Toolbar
@@ -743,13 +740,6 @@ function WorkspaceModeSwitch({ workspaceMode, onChange }) {
         onClick={() => onChange("spec")}
       >
         Spec Excel
-      </button>
-      <button
-        type="button"
-        className={workspaceMode === "editor" ? "active" : ""}
-        onClick={() => onChange("editor")}
-      >
-        Editor Beta
       </button>
       <button
         type="button"

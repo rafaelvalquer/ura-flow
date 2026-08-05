@@ -1,0 +1,27 @@
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@
+ import NiceScriptWorkspace from "./components/NiceScriptWorkspace";
+ import SpecNiceComparisonModal from "./components/SpecNiceComparisonModal";
++import SpecEditorWorkspace from "./components/spec-editor/SpecEditorWorkspace.jsx";
+ import Toolbar from "./components/Toolbar";
+@@
+-      <div className={`app-shell ${workspaceMode === "spec" ? "spec-workspace-shell" : "nice-workspace-shell"}`}>
++      <div className={`app-shell ${workspaceMode === "spec" ? "spec-workspace-shell" : workspaceMode === "nice" ? "nice-workspace-shell" : "editor-workspace-shell"}`}>
+@@
+         {workspaceMode === "nice" ? (
+           <NiceScriptWorkspace />
++        ) : workspaceMode === "editor" ? (
++          <SpecEditorWorkspace initialParsedData={parsedData} />
+         ) : (
+@@
+       <button
++        type="button"
++        className={workspaceMode === "editor" ? "active" : ""}
++        onClick={() => onChange("editor")}
++      >
++        Editor Beta
++      </button>
++      <button
+         type="button"
+         className={workspaceMode === "nice" ? "active" : ""}

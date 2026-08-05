@@ -871,6 +871,8 @@ button:disabled {
 }
 
 .nice-left-tabs button {
+  position: relative;
+  overflow: hidden;
   min-height: 32px;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -880,6 +882,29 @@ button:disabled {
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.nice-left-tabs button span {
+  position: relative;
+  z-index: 1;
+}
+
+.nice-left-tabs button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 8px 8px 0 0;
+  background: #2563eb;
+  opacity: 0;
+  transform: translateX(-102%);
+  transition:
+    opacity 180ms ease,
+    transform 260ms ease;
 }
 
 .nice-left-tabs button:hover,
@@ -891,8 +916,26 @@ button:disabled {
 
 .nice-left-tabs button.is-active {
   border-bottom-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
+}
+
+.nice-left-tabs button.is-active::after {
+  opacity: 1;
+  transform: translateX(0);
+  animation: nice-tab-blue-sweep 260ms ease;
+}
+
+@keyframes nice-tab-blue-sweep {
+  from {
+    opacity: 1;
+    transform: translateX(-102%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .nice-accordion-toggle {
