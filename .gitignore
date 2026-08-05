@@ -1,5 +1,7 @@
 node_modules/
 dist/
+desktop/app/
+desktop/release/
 
 *.log
 npm-debug.log*

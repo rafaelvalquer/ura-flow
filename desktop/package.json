@@ -1,0 +1,58 @@
+{
+  "name": "ura-flow-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "URA Flow desktop application for Windows",
+  "main": "main.js",
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "start": "npm run prepare-assets && electron .",
+    "package:win": "npm run prepare-assets && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "br.com.rafaelvalquer.uraflow",
+    "productName": "URA Flow",
+    "artifactName": "URA-Flow-Setup-${version}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "app",
+        "to": "app",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "URA Flow",
+      "uninstallDisplayName": "URA Flow"
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
